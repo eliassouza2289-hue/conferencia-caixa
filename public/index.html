@@ -11,7 +11,7 @@ body{margin:0;background:linear-gradient(180deg,#f7faf9 0,#eef4f2 100%);color:va
 header{position:sticky;top:0;z-index:5;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:12px 18px;display:flex;justify-content:space-between;gap:14px;align-items:center}
 h1,h2,h3,p{margin:0} h1{font-size:22px} h2{font-size:17px} h3{font-size:14px}
 .muted{color:var(--muted);font-size:13px}.wrap{padding:14px;display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:14px}
-.hide-report .wrap{grid-template-columns:1fr}.hide-report aside{display:none}
+.hide-report .wrap{grid-template-columns:1fr;padding:10px}.hide-report aside{display:none}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;box-shadow:var(--shadow)}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.top{display:flex;justify-content:space-between;gap:10px;align-items:center}
 .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
@@ -41,6 +41,7 @@ button{border:1px solid var(--brand);background:var(--brand);color:white;border-
 .report-title{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px}
 .record{box-shadow:0 4px 18px rgba(20,38,32,.05)}.record p{line-height:1.4}
 .table button{white-space:nowrap}
+.hide-report .form-area{padding:12px}.hide-report #fixedQuestions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.hide-report #fixedQuestions .fixed-group{margin:0}.hide-report #gates{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.hide-report .gate{margin-top:0}.hide-report .gate[data-gate="tele"]{grid-column:1/-1}.hide-report .gate.hidden{display:none}
 @media print{header,.form-area,.filters,.record .row,.no-print{display:none!important}.wrap{display:block;padding:0}aside{display:block}.panel,.record{border:0;box-shadow:none}}
 </style>
 </head>

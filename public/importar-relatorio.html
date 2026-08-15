@@ -172,25 +172,83 @@
       if (primary.valor || !fallback?.valor) return primary;
       return { ...primary, ...fallback, detectado: true };
     }
+    function repeatedPairs(tokens) {
+      const pairs = [];
+      for (let i = 0; i < tokens.length - 1; i += 1) {
+        if (tokens[i].val > 0 && Math.abs(tokens[i].val - tokens[i + 1].val) < 0.001) {
+          pairs.push({ ...tokens[i], index: i });
+          i += 1;
+        }
+      }
+      return pairs;
+    }
+    function extractBrowserCardQtds(clean, names) {
+      const around = clean.slice(Math.max(0, names - 2000), names + 500);
+      const out = {};
+      const cardLines = around.split(/\r?\n/).map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+      const itemLine = cardLines.findIndex((line) => line.includes("10 - PIX OFFLINE"));
+      const ints = itemLine >= 0 && cardLines[itemLine + 1]
+        ? cardLines[itemLine + 1].match(/\b\d{1,3}\b/g).map(Number).filter(Number.isFinite)
+        : [];
+      if (ints.length >= 8) {
+        out[10] = ints[0];
+        out[11] = ints[2];
+        out[15] = ints[ints.length - 4];
+        out[17] = ints[ints.length - 2];
+      }
+      const tefLine = cardLines.slice(Math.max(0, itemLine + 2), itemLine + 8).find((line) => /^\d{1,3}\s+\d{1,3}\s+\d{1,3}\s+\d{1,3}$/.test(line));
+      const tefInts = tefLine ? tefLine.match(/\d{1,3}/g).map(Number) : [];
+      if (tefInts.length >= 4) {
+        out[13] = tefInts[0];
+        out[14] = tefInts[2];
+      }
+      return out;
+    }
+    function extractBrowserCardSequence(text) {
+      const clean = norm(text);
+      const names = clean.indexOf("CARTAO PIX OFFLINE PAGAMENTO ONLINE IFOOD");
+      const client = clean.lastIndexOf("CLIENT ", names);
+      const header = client >= 0 ? clean.indexOf("VALOR VENDAS QTD. VENDAS MEDIA VENDAS", client) : -1;
+      if (names < 0 || client < 0 || header < 0 || header < client) return {};
+      const section = clean.slice(client, header);
+      const context = clean.slice(Math.max(0, names - 1400), header);
+      const tokens = moneyTokens(section)
+        .map((item, index) => ({ ...item, index }))
+        .filter((item) => item.val > 0);
+      const pairs = repeatedPairs(tokens);
+      if (pairs.length < 4) return {};
+      const qtds = extractBrowserCardQtds(clean, names);
+      const out = {};
+      const set = (code, token) => {
+        if (token?.val) out[code] = { valor: token.val, qtd: qtds[code] || inferQtdByMedia(token.val, context), detectado: true };
+      };
+      set(10, pairs[0]);
+      set(11, pairs[1]);
+      set(15, pairs[pairs.length - 2]);
+      set(17, pairs[pairs.length - 1]);
+      const credit = tokens.find((item) => item.index > pairs[1].index + 1 && item.index < pairs[pairs.length - 2].index && item.val > pairs[1].val && item.val !== pairs[1].val);
+      const betweenCreditAndPos = tokens.filter((item) => item.index > (credit?.index ?? pairs[1].index) && item.index < pairs[pairs.length - 2].index);
+      const debit = betweenCreditAndPos.find((item, idx) => {
+        const following = betweenCreditAndPos.slice(idx + 1).reduce((sum, next) => sum + next.val, 0);
+        return item.val > 100 && Math.abs(item.val - following) <= 0.03;
+      }) || betweenCreditAndPos.find((item) => item.val > 100 && item.val < (credit?.val || Infinity));
+      set(13, credit);
+      set(14, debit);
+      return out;
+    }
     function extractVendasCartaoFallback(text) {
       const clean = norm(text);
-      const out = {};
+      const out = extractBrowserCardSequence(text);
       const pixAnchor = clean.indexOf("CARTAO PIX OFFLINE PAGAMENTO ONLINE IFOOD");
       if (pixAnchor >= 0) {
         const section = clean.slice(Math.max(0, pixAnchor - 1200), pixAnchor);
         const header = section.lastIndexOf("VALOR VENDAS");
         const positive = moneyTokens(section).filter((item) => item.val > 0);
-        const pairs = [];
-        for (let i = 0; i < positive.length - 1; i += 1) {
-          if (Math.abs(positive[i].val - positive[i + 1].val) < 0.001) {
-            pairs.push(positive[i]);
-            i += 1;
-          }
-        }
+        const pairs = repeatedPairs(positive);
         const lastPairs = pairs.slice(-2);
         const pairValues = pairs.map((item) => item.val);
-        if (lastPairs[0]?.val) out[10] = { valor: lastPairs[0].val, qtd: inferQtdByMedia(lastPairs[0].val, section, pairValues) };
-        if (lastPairs[1]?.val) out[11] = { valor: lastPairs[1].val, qtd: inferQtdByMedia(lastPairs[1].val, section, pairValues) };
+        if (!out[10]?.valor && lastPairs[0]?.val) out[10] = { valor: lastPairs[0].val, qtd: inferQtdByMedia(lastPairs[0].val, section, pairValues) };
+        if (!out[11]?.valor && lastPairs[1]?.val) out[11] = { valor: lastPairs[1].val, qtd: inferQtdByMedia(lastPairs[1].val, section, pairValues) };
         if (header >= 0) {
           const vals = moneyTokens(section.slice(header));
           const medias = moneyTokens(section.slice(Math.max(0, header - 180), header)).slice(-4);
@@ -209,10 +267,39 @@
         const beforeClient = client >= 0 ? moneyTokens(section.slice(0, client)) : [];
         const pix = repeatAmount(beforeClient, true);
         const pos = repeatAmount(totals.slice(3));
-        if (totals[0]?.val) out[13] = { valor: totals[0].val, qtd: qtds[0] || 0 };
-        if (totals[2]?.val) out[14] = { valor: totals[2].val, qtd: qtds[2] || 0 };
-        if (pos?.val) out[15] = { valor: pos.val, qtd: qtds[6] || 0 };
-        if (pix?.val) out[17] = { valor: pix.val, qtd: qtds[qtds.length - 2] || 0 };
+        if (!out[13]?.valor && totals[0]?.val) out[13] = { valor: totals[0].val, qtd: qtds[0] || inferQtdByMedia(totals[0].val, section) };
+        if (!out[14]?.valor && totals[2]?.val) out[14] = { valor: totals[2].val, qtd: qtds[2] || inferQtdByMedia(totals[2].val, section) };
+        if (!out[15]?.valor && pos?.val) out[15] = { valor: pos.val, qtd: qtds[6] || inferQtdByMedia(pos.val, section) };
+        if (!out[17]?.valor && pix?.val) out[17] = { valor: pix.val, qtd: qtds[qtds.length - 2] || inferQtdByMedia(pix.val, section) };
+      }
+      return out;
+    }
+    function browserResumoValores(text) {
+      const clean = norm(text);
+      const out = {};
+      const liquido = clean.match(/^\s*0,00\s+0,00\s+([\d.]+,\d{2})\s+([\d.]+,\d{2})\s+([\d.]+,\d{2})\s+([\d.]+,\d{2})\s+([\d.]+,\d{2})\s+VLR\.LIQUIDO/);
+      if (liquido) {
+        out.crediario = liquido[1];
+        out.dinheiro = liquido[2];
+        out.convenio = liquido[3];
+      }
+      const tele = clean.match(/\b(\d{1,3})\s+(\d{1,3})\s+CHEQUE A VISTA:/);
+      if (tele) {
+        out.teleBase = Number(tele[1]);
+        out.devolucaoQtd = Number(tele[2]) - Number(tele[1]) === -1 ? 1 : 0;
+      }
+      const devol = clean.match(/\bDEVOL\.\s*([\d.]+,\d{2})/);
+      if (devol) out.devolucaoCartao = devol[1];
+      const sangriaStart = clean.indexOf("MOVIMENTO DE CAIXA DETALHADO");
+      const sangriaEnd = clean.indexOf("OBSERVACAO SANGRIA", sangriaStart);
+      if (sangriaStart >= 0 && sangriaEnd > sangriaStart) {
+        const vals = moneyTokens(clean.slice(sangriaStart, sangriaEnd)).filter((item) => item.val > 0);
+        if (vals[0]?.raw) out.sangria = vals[0].raw;
+      }
+      if (!out.sangria) {
+        const movto = clean.match(/PAGINA 2[\s\S]{0,500}?((?:[\d.]+,\d{2}\s+){2,8})-?[\d.]+,\d{2}\s+VLR\.MOVTO/);
+        const vals = movto ? moneyTokens(movto[1]).filter((item) => item.val > 0) : [];
+        if (vals[0]?.raw) out.sangria = vals[0].raw;
       }
       return out;
     }
@@ -258,13 +345,30 @@
       if (start < 0) return [];
       const section = clean.slice(Math.max(0, start - 1800), end > start ? end : start + 2500);
       const origemLine = section.match(/CX\.\s*(?:VLR\.\s*LIQUIDO\s*)?((?:\d{4}\s+){1,8}\d{4})/);
+      const retornoLine = section.match(/CX\.RETORNO[\s\S]{0,300}?((?:\b\d{4}\b\s*){2,8})[\s\S]{0,100}?CX\./);
+      const retornoBefore = section.match(/((?:\b\d{4}\b\s*){2,8})[\s\S]{0,80}?CX\.RETORNO/);
       const origens = origemLine
         ? origemLine[1].trim().split(/\s+/).filter((n) => n !== caixaAtual && n !== "2026")
         : [...section.matchAll(/\b\d{4}\b/g)].map((m) => m[0]).filter((n) => n !== caixaAtual && n !== "2026");
+      const retornos = retornoLine
+        ? retornoLine[1].trim().split(/\s+/).slice(-8)
+        : (retornoBefore ? retornoBefore[1].trim().split(/\s+/).slice(-8) : []);
       const formasLine = section.match(/FORMA PAGTO\s*(?:\d{2}:\d{2}\s*)+([A-Z ]{8,80})/);
       const formas = formasLine
         ? (formasLine[1].match(/\b(CONVENIO|CREDIARIO|CARTAO|DINHEIRO|PIX|TEF)\b/g) || [])
         : (section.match(/\b(CONVENIO|CREDIARIO|CARTAO|DINHEIRO|PIX|TEF)\b/g) || []).filter((v) => !["TEF", "PIX"].includes(v));
+      if (retornos.length) {
+        const origensComCaixaAtual = origemLine ? origemLine[1].trim().split(/\s+/) : [];
+        return origensComCaixaAtual.slice(0, retornos.length).map((origem, i) => {
+          if (retornos[i] === caixaAtual && origem !== caixaAtual) {
+            return { tipo: "recebida", caixa: origem, qtd: 1, obs: `${formas[i] || "Tele"} encontrada no PDF; conferir romaneio.` };
+          }
+          if (origem === caixaAtual && retornos[i] !== caixaAtual) {
+            return { tipo: "enviada", caixa: retornos[i], qtd: 1, obs: `${formas[i] || "Tele"} encontrada no PDF; conferir romaneio.` };
+          }
+          return null;
+        }).filter(Boolean);
+      }
       return origens.slice(0, 6).map((origem, i) => ({
         tipo: "recebida",
         caixa: origem,
@@ -306,13 +410,15 @@
       const caixa = header ? header[1] : valueAfter(clean, /CAIXA:[ \t]*(\d{3,6})/i);
       const operador = header ? header[2].trim().replace(/\s+/g, " ") : operadorFallback;
       const data = brDateToIso(header ? header[4] : fechamentoFallback);
+      const browserResumo = browserResumoValores(text);
       const abertura = valueFromLine(lines, "ABERTURA DE CAIXA");
-      const dinheiro = valueFromLine(lines, "VENDAS DINHEIRO");
+      const dinheiro = valueFromLine(lines, "VENDAS DINHEIRO") || browserResumo.dinheiro || "";
       const cartao = valueFromLine(lines, "VENDAS CARTAO") || valueFromLine(lines, "MOVIMENTO CAIXA CARTAO") || nearValue(lines, "MOVIMENTO CAIXA CARTAO");
-      const crediario = valueFromLine(lines, "VENDAS CREDIARIO") || valueFromLine(lines, "MOVIMENTO CAIXA CREDIARIO");
-      const convenio = valueFromLine(lines, "VENDAS CONVENIO") || valueFromLine(lines, "MOVIMENTO CAIXA CONVENIO");
+      const crediario = valueFromLine(lines, "VENDAS CREDIARIO") || valueFromLine(lines, "MOVIMENTO CAIXA CREDIARIO") || browserResumo.crediario || "";
+      const convenio = valueFromLine(lines, "VENDAS CONVENIO") || valueFromLine(lines, "MOVIMENTO CAIXA CONVENIO") || browserResumo.convenio || "";
       const reembolso = valueFromLine(lines, "REEMBOLSO") || valueFromLine(lines, "MOVIMENTO CAIXA REEMBOLSO") || nearValue(lines, "REEMBOLSO");
-      const sangria = valueFromLine(lines, "SANGRIA DINHEIRO") || valueFromLine(lines, "MOVIMENTO CAIXA DINHEIRO") || nearValue(lines, "SANGRIA");
+      const sangriaLinha = valueFromLine(lines, "SANGRIA DINHEIRO") || valueFromLine(lines, "MOVIMENTO CAIXA DINHEIRO");
+      const sangria = money(sangriaLinha) ? sangriaLinha : (browserResumo.sangria || nearValue(lines, "SANGRIA"));
       const teleLine = lines.find((line) => /VENDAS:\s*\d+\s+[\d.]+,\d{2}/.test(line));
       const teleResumo = teleLine ? teleLine.match(/VENDAS:\s*(\d+)\s+([\d.]+,\d{2})/) : null;
       const teleSolta = text.match(/(\d+)\s+0\s+\1\s+[\s\S]{0,700}?Vendas Tele-Entrega/i);
@@ -325,15 +431,15 @@
       const tefPix = mergeCard(cardLine(text, 17, "TEF PIX"), cartaoFallback[17]);
       const devolucoes = {
         dinheiro: money(valueFromLine(lines, "DEVOLUCAO VENDAS DINHEIRO")),
-        cartao: money(valueFromLine(lines, "DEVOLUCAO VENDAS CARTAO")),
+        cartao: money(valueFromLine(lines, "DEVOLUCAO VENDAS CARTAO") || browserResumo.devolucaoCartao),
         crediario: money(valueFromLine(lines, "DEVOLUCAO VENDAS CREDIARIO")),
         convenio: money(valueFromLine(lines, "DEVOLUCAO VENDAS CONVENIO")),
-        resumoQtd: numberFromLine(lines, "DEVOLUCOES"),
+        resumoQtd: numberFromLine(lines, "DEVOLUCOES") || browserResumo.devolucaoQtd || 0,
       };
       devolucoes.total = devolucoes.dinheiro + devolucoes.cartao + devolucoes.crediario + devolucoes.convenio;
       let teleMovimentos = extractTeleMovimentos(text, caixa);
       if (!teleMovimentos.length) teleMovimentos = extractTeleMovimentosSoltos(text, caixa);
-      const teleBase = teleResumo ? Number(teleResumo[1]) : (teleSolta ? Number(teleSolta[1]) : 0);
+      const teleBase = teleResumo ? Number(teleResumo[1]) : (teleSolta ? Number(teleSolta[1]) : (browserResumo.teleBase || 0));
       const recebidas = teleMovimentos.filter((m) => m.tipo === "recebida").length;
       const enviadas = teleMovimentos.filter((m) => m.tipo === "enviada").length;
       const perguntas = {};

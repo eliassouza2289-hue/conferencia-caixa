@@ -121,6 +121,22 @@
       const m = line ? line.match(re) : null;
       return m ? m[1] : "";
     }
+    function hasLabel(text, label) {
+      return new RegExp(labelPattern(label), "i").test(norm(text));
+    }
+    function nearValue(lines, label, direction = "after") {
+      const re = new RegExp(labelPattern(label), "i");
+      const idx = lines.findIndex((item) => re.test(item));
+      if (idx < 0) return "";
+      const range = direction === "before"
+        ? lines.slice(Math.max(0, idx - 5), idx).reverse()
+        : lines.slice(idx + 1, idx + 6);
+      for (const line of range) {
+        const values = line.match(/[\d.]+,\d{2}/g);
+        if (values?.length) return values[0];
+      }
+      return "";
+    }
     function numberFromLine(lines, label) {
       const re = new RegExp(labelPattern(label) + "\\s*:?\\s*(\\d+)", "i");
       const line = lines.find((item) => re.test(item));
@@ -130,10 +146,14 @@
     function cardLine(text, code, label) {
       const re = new RegExp(`\\b${code}\\s+${labelPattern(label)}\\s+([\\d.]+,\\d{2})\\s+(\\d+)\\b`, "im");
       const m = norm(text).match(re);
-      return { qtd: m ? Number(m[2]) : 0, valor: m ? money(m[1]) : 0 };
+      return { qtd: m ? Number(m[2]) : 0, valor: m ? money(m[1]) : 0, detectado: Boolean(m) || hasLabel(text, label) };
     }
     function addQuestion(perguntas, texto, obs) {
       if (obs) perguntas[texto] = { status: "", tipo: "Importado do PDF", obs };
+    }
+    function obsValor(nome, item) {
+      if (!item?.detectado) return "";
+      return item.valor ? `${nome} no PDF: ${item.qtd || "-"} venda(s), ${moneyText(item.valor)}` : `${nome} encontrado no PDF; conferir valor manualmente.`;
     }
     function extractTeleMovimentos(text, caixaAtual) {
       const lines = text.split(/\r?\n/);
@@ -163,6 +183,27 @@
       }
       return movs;
     }
+    function extractTeleMovimentosSoltos(text, caixaAtual) {
+      const clean = norm(text);
+      const start = clean.indexOf("VENDAS TELE-ENTR.FINAL.OUTRO CAIXA");
+      const end = clean.indexOf("VENDAS REALIZADAS NESTE CAIXA", start);
+      if (start < 0) return [];
+      const section = clean.slice(Math.max(0, start - 1800), end > start ? end : start + 2500);
+      const origemLine = section.match(/CX\.\s*(?:VLR\.\s*LIQUIDO\s*)?((?:\d{4}\s+){1,8}\d{4})/);
+      const origens = origemLine
+        ? origemLine[1].trim().split(/\s+/).filter((n) => n !== caixaAtual && n !== "2026")
+        : [...section.matchAll(/\b\d{4}\b/g)].map((m) => m[0]).filter((n) => n !== caixaAtual && n !== "2026");
+      const formasLine = section.match(/FORMA PAGTO\s*(?:\d{2}:\d{2}\s*)+([A-Z ]{8,80})/);
+      const formas = formasLine
+        ? (formasLine[1].match(/\b(CONVENIO|CREDIARIO|CARTAO|DINHEIRO|PIX|TEF)\b/g) || [])
+        : (section.match(/\b(CONVENIO|CREDIARIO|CARTAO|DINHEIRO|PIX|TEF)\b/g) || []).filter((v) => !["TEF", "PIX"].includes(v));
+      return origens.slice(0, 6).map((origem, i) => ({
+        tipo: "recebida",
+        caixa: origem,
+        qtd: 1,
+        obs: `${formas[i] || "Tele"} encontrada no PDF; conferir romaneio.`,
+      }));
+    }
     async function readPdf(file) {
       const data = new Uint8Array(await file.arrayBuffer());
       const pdf = await pdfjsLib.getDocument({ data }).promise;
@@ -190,21 +231,23 @@
       const lines = normLines(text);
       const headerLine = text.split(/\r?\n/).find((line) => /Caixa:/i.test(line) && /ABERTURA:/i.test(line)) || "";
       const headerSource = headerLine || text;
-      const header = headerSource.match(/Caixa:\s*(\d+)\s*-\s*([\s\S]{0,160}?)\.?\s*ABERTURA:\s*(\d{2}\/\d{2}\/\d{4})\s+[\d:]+\s*\|\s*FECHAMENTO:\s*(\d{2}\/\d{2}\/\d{4})/i);
+      const header = headerSource.match(/Caixa:\s*(\d{3,6})\s*-\s*([\s\S]{0,160}?)\.?\s*ABERTURA:\s*(\d{2}\/\d{2}\/\d{4})\s+[\d:]+\s*\|\s*FECHAMENTO:\s*(\d{2}\/\d{2}\/\d{4})/i)
+        || text.match(/\b(\d{3,6})\s*-\s*([A-ZÀ-Ú][A-ZÀ-Ú\s.]{5,160}?)\.?\s*ABERTURA:\s*(\d{2}\/\d{2}\/\d{4})\s+[\d:]+\s*\|\s*FECHAMENTO:\s*(\d{2}\/\d{2}\/\d{4})/i);
       const operadorFallback = valueAfter(text, /Caixa:\s*\d+\s*-\s*([\s\S]{0,160}?)\.?\s*ABERTURA:/i).trim().replace(/\s+/g, " ");
       const fechamentoFallback = valueAfter(text, /FECHAMENTO:\s*(\d{2}\/\d{2}\/\d{4})/i) || valueAfter(text, /Data:\s*(\d{2}\/\d{2}\/\d{4})/i);
-      const caixa = header ? header[1] : valueAfter(clean, /CAIXA:\s*(\d+)/i);
+      const caixa = header ? header[1] : valueAfter(clean, /CAIXA:[ \t]*(\d{3,6})/i);
       const operador = header ? header[2].trim().replace(/\s+/g, " ") : operadorFallback;
       const data = brDateToIso(header ? header[4] : fechamentoFallback);
       const abertura = valueFromLine(lines, "ABERTURA DE CAIXA");
       const dinheiro = valueFromLine(lines, "VENDAS DINHEIRO");
-      const cartao = valueFromLine(lines, "VENDAS CARTAO");
-      const crediario = valueFromLine(lines, "VENDAS CREDIARIO");
-      const convenio = valueFromLine(lines, "VENDAS CONVENIO");
-      const reembolso = valueFromLine(lines, "REEMBOLSO");
-      const sangria = valueFromLine(lines, "SANGRIA DINHEIRO") || valueFromLine(lines, "MOVIMENTO CAIXA DINHEIRO");
+      const cartao = valueFromLine(lines, "VENDAS CARTAO") || valueFromLine(lines, "MOVIMENTO CAIXA CARTAO") || nearValue(lines, "MOVIMENTO CAIXA CARTAO");
+      const crediario = valueFromLine(lines, "VENDAS CREDIARIO") || valueFromLine(lines, "MOVIMENTO CAIXA CREDIARIO");
+      const convenio = valueFromLine(lines, "VENDAS CONVENIO") || valueFromLine(lines, "MOVIMENTO CAIXA CONVENIO");
+      const reembolso = valueFromLine(lines, "REEMBOLSO") || valueFromLine(lines, "MOVIMENTO CAIXA REEMBOLSO") || nearValue(lines, "REEMBOLSO");
+      const sangria = valueFromLine(lines, "SANGRIA DINHEIRO") || valueFromLine(lines, "MOVIMENTO CAIXA DINHEIRO") || nearValue(lines, "SANGRIA");
       const teleLine = lines.find((line) => /VENDAS:\s*\d+\s+[\d.]+,\d{2}/.test(line));
       const teleResumo = teleLine ? teleLine.match(/VENDAS:\s*(\d+)\s+([\d.]+,\d{2})/) : null;
+      const teleSolta = text.match(/(\d+)\s+0\s+\1\s+[\s\S]{0,700}?Vendas Tele-Entrega/i);
       const pixOff = cardLine(text, 10, "PIX OFFLINE");
       const ifood = cardLine(text, 11, "PAGAMENTO ONLINE IFOOD");
       const tefCredito = cardLine(text, 13, "TEF CREDITO");
@@ -219,31 +262,32 @@
         resumoQtd: numberFromLine(lines, "DEVOLUCOES"),
       };
       devolucoes.total = devolucoes.dinheiro + devolucoes.cartao + devolucoes.crediario + devolucoes.convenio;
-      const teleMovimentos = extractTeleMovimentos(text, caixa);
-      const teleBase = teleResumo ? Number(teleResumo[1]) : 0;
+      let teleMovimentos = extractTeleMovimentos(text, caixa);
+      if (!teleMovimentos.length) teleMovimentos = extractTeleMovimentosSoltos(text, caixa);
+      const teleBase = teleResumo ? Number(teleResumo[1]) : (teleSolta ? Number(teleSolta[1]) : 0);
       const recebidas = teleMovimentos.filter((m) => m.tipo === "recebida").length;
       const enviadas = teleMovimentos.filter((m) => m.tipo === "enviada").length;
       const perguntas = {};
-      addQuestion(perguntas, "Valor de abertura conferido", abertura ? `Abertura no PDF: ${moneyText(abertura)}` : "");
+      addQuestion(perguntas, "Valor de abertura conferido", abertura ? `Abertura no PDF: ${moneyText(abertura)}` : (hasLabel(text, "ABERTURA DE CAIXA") ? "Abertura encontrada no PDF; conferir valor manualmente." : ""));
       addQuestion(perguntas, "Valor de fechamento conferido", dinheiro ? `Vendas dinheiro no PDF: ${moneyText(dinheiro)}` : "");
       addQuestion(perguntas, "Sangria contada fisicamente", sangria ? `Sangria/movimento no PDF: ${moneyText(sangria)}` : "");
-      addQuestion(perguntas, "Cartões POS conferidos", pos.valor ? `POS no PDF: ${pos.qtd} venda(s), ${moneyText(pos.valor)}` : "");
-      addQuestion(perguntas, "TEF débito conferido", tefDebito.valor ? `TEF débito no PDF: ${tefDebito.qtd} venda(s), ${moneyText(tefDebito.valor)}` : "");
-      addQuestion(perguntas, "TEF crédito conferido", tefCredito.valor ? `TEF crédito no PDF: ${tefCredito.qtd} venda(s), ${moneyText(tefCredito.valor)}` : "");
-      addQuestion(perguntas, "TEF Pix conferido", tefPix.valor ? `TEF Pix no PDF: ${tefPix.qtd} venda(s), ${moneyText(tefPix.valor)}` : "");
-      addQuestion(perguntas, "Comprovante pix conferido", pixOff.valor ? `Pix offline no PDF: ${pixOff.qtd} venda(s), ${moneyText(pixOff.valor)}` : "");
-      addQuestion(perguntas, "Romaneio Ifood conferido", ifood.valor ? `iFood no PDF: ${ifood.qtd} venda(s), ${moneyText(ifood.valor)}` : "");
-      addQuestion(perguntas, "Recebimento de crediário conferido", money(crediario) ? `Crediário no PDF: ${moneyText(crediario)}` : "");
-      addQuestion(perguntas, "Recebimento de convênio conferido", money(convenio) ? `Convênio no PDF: ${moneyText(convenio)}` : "");
+      addQuestion(perguntas, "Cartões POS conferidos", obsValor("POS", pos));
+      addQuestion(perguntas, "TEF débito conferido", obsValor("TEF débito", tefDebito));
+      addQuestion(perguntas, "TEF crédito conferido", obsValor("TEF crédito", tefCredito));
+      addQuestion(perguntas, "TEF Pix conferido", obsValor("TEF Pix", tefPix));
+      addQuestion(perguntas, "Comprovante pix conferido", obsValor("Pix offline", pixOff));
+      addQuestion(perguntas, "Romaneio Ifood conferido", obsValor("iFood", ifood));
+      addQuestion(perguntas, "Recebimento de crediário conferido", money(crediario) ? `Crediário no PDF: ${moneyText(crediario)}` : (hasLabel(text, "CREDIARIO") ? "Crediário encontrado no PDF; conferir valor manualmente." : ""));
+      addQuestion(perguntas, "Recebimento de convênio conferido", money(convenio) ? `Convênio no PDF: ${moneyText(convenio)}` : (hasLabel(text, "CONVENIO") ? "Convênio encontrado no PDF; conferir valor manualmente." : ""));
       addQuestion(perguntas, "Devoluções conferidas", devolucoes.total || devolucoes.resumoQtd ? `Devoluções no PDF: ${devolucoes.resumoQtd} ocorrência(s), ${moneyText(String(devolucoes.total).replace(".", ","))}` : "");
       const gates = {
         tele: teleBase || teleMovimentos.length ? "sim" : "nao",
-        cartao_pos: pos.valor ? "sim" : "nao",
-        tef: tefCredito.valor || tefDebito.valor || tefPix.valor ? "sim" : "nao",
-        pix_off: pixOff.valor ? "sim" : "nao",
-        ifood: ifood.valor ? "sim" : "nao",
-        crediario: money(crediario) ? "sim" : "nao",
-        convenio: money(convenio) ? "sim" : "nao",
+        cartao_pos: pos.valor || pos.detectado ? "sim" : "nao",
+        tef: tefCredito.valor || tefDebito.valor || tefPix.valor || tefCredito.detectado || tefDebito.detectado || tefPix.detectado ? "sim" : "nao",
+        pix_off: pixOff.valor || pixOff.detectado ? "sim" : "nao",
+        ifood: ifood.valor || ifood.detectado ? "sim" : "nao",
+        crediario: money(crediario) || hasLabel(text, "CREDIARIO") ? "sim" : "nao",
+        convenio: money(convenio) || hasLabel(text, "CONVENIO") ? "sim" : "nao",
         devolucoes: devolucoes.total || devolucoes.resumoQtd ? "sim" : "nao",
       };
       const resumo = [

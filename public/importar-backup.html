@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Importar backup - Conferência de Caixa</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --green: #0f7b63;
+      --green-dark: #075c4a;
+      --line: #d7e4df;
+      --bg: #f4f8f6;
+      --text: #10231f;
+      --muted: #5d706b;
+      --danger: #b42318;
+      --ok: #0f7b63;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    main {
+      width: min(920px, calc(100% - 32px));
+      margin: 40px auto;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 14px 40px rgba(15, 72, 58, 0.08);
+      overflow: hidden;
+    }
+    header {
+      padding: 28px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #ffffff 0%, #f7fbf9 100%);
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 26px;
+      letter-spacing: 0;
+    }
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    section { padding: 24px 28px; }
+    label {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    input[type="file"] {
+      width: 100%;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+    .row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 18px;
+    }
+    button, a.button {
+      appearance: none;
+      border: 1px solid var(--green);
+      background: var(--green);
+      color: #fff;
+      border-radius: 8px;
+      padding: 11px 16px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      min-height: 42px;
+    }
+    button.secondary, a.button.secondary {
+      color: var(--green);
+      background: #fff;
+    }
+    button:disabled {
+      opacity: .55;
+      cursor: wait;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(130px, 1fr));
+      gap: 10px;
+      margin-top: 22px;
+    }
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fbfdfc;
+    }
+    .metric strong {
+      display: block;
+      font-size: 24px;
+      margin-bottom: 4px;
+    }
+    .metric span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    progress {
+      width: 100%;
+      height: 16px;
+      accent-color: var(--green);
+      margin-top: 18px;
+    }
+    #log {
+      margin-top: 18px;
+      padding: 14px;
+      min-height: 190px;
+      max-height: 360px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #081915;
+      color: #e6fff8;
+      font: 13px/1.55 Consolas, "Courier New", monospace;
+      white-space: pre-wrap;
+    }
+    .ok { color: #8bf0cc; }
+    .warn { color: #ffd98a; }
+    .err { color: #ffaca5; }
+    .note {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-left: 4px solid var(--green);
+      background: #eff8f5;
+      border-radius: 6px;
+      color: var(--muted);
+    }
+    @media (max-width: 720px) {
+      main { margin: 18px auto; width: min(100% - 18px, 920px); }
+      header, section { padding: 20px; }
+      .summary { grid-template-columns: repeat(2, 1fr); }
+      button, a.button { width: 100%; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Importar backup do Conferidor</h1>
+      <p>Selecione o arquivo JSON gerado no computador antigo. A tela cadastra pessoas e conferências no Supabase online, pulando conferências que parecem já existir.</p>
+    </header>
+
+    <section>
+      <label for="arquivo">Arquivo de backup</label>
+      <input id="arquivo" type="file" accept=".json,application/json" />
+      <div class="note">O arquivo fica no seu computador e só é enviado ao seu próprio site durante a importação.</div>
+
+      <div class="row">
+        <button id="importar">Importar backup</button>
+        <a class="button secondary" href="/">Voltar ao sistema</a>
+      </div>
+
+      <div class="summary" aria-live="polite">
+        <div class="metric"><strong id="mPessoas">0</strong><span>pessoas no arquivo</span></div>
+        <div class="metric"><strong id="mConfs">0</strong><span>conferências no arquivo</span></div>
+        <div class="metric"><strong id="mImportadas">0</strong><span>conferências importadas</span></div>
+        <div class="metric"><strong id="mPuladas">0</strong><span>conferências já existentes</span></div>
+      </div>
+
+      <progress id="progresso" value="0" max="100"></progress>
+      <div id="log">Aguardando arquivo...</div>
+    </section>
+  </main>
+
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+    const state = { pessoas: 0, conferencias: 0, importadas: 0, puladas: 0, erros: 0 };
+
+    function setMetric(key, value) {
+      state[key] = value;
+      const map = { pessoas: "mPessoas", conferencias: "mConfs", importadas: "mImportadas", puladas: "mPuladas" };
+      if (map[key]) $("#" + map[key]).textContent = value;
+    }
+
+    function log(msg, cls) {
+      const line = document.createElement("div");
+      if (cls) line.className = cls;
+      line.textContent = msg;
+      const box = $("#log");
+      if (box.textContent === "Aguardando arquivo...") box.textContent = "";
+      box.appendChild(line);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function stable(value) {
+      if (Array.isArray(value)) return "[" + value.map(stable).join(",") + "]";
+      if (value && typeof value === "object") {
+        return "{" + Object.keys(value).sort().map((k) => JSON.stringify(k) + ":" + stable(value[k])).join(",") + "}";
+      }
+      return JSON.stringify(value ?? "");
+    }
+
+    function signature(conf) {
+      return [
+        conf.data || "",
+        String(conf.numero_caixa || "").trim(),
+        conf.operador || "",
+        conf.responsavel || "",
+        conf.status || "",
+        stable(conf.perguntas || {}),
+        stable(conf.tele || {}),
+      ].join("|");
+    }
+
+    function confPayload(conf) {
+      return {
+        data: conf.data || "",
+        numero_caixa: String(conf.numero_caixa || "").trim(),
+        operador: conf.operador || "",
+        responsavel: conf.responsavel || "",
+        status: conf.status || "pendente",
+        checklist: Array.isArray(conf.checklist) ? conf.checklist : [],
+        perguntas: conf.perguntas || {},
+        gates: conf.gates || {},
+        tele: conf.tele || {},
+        observacao_erro: conf.observacao_erro || "",
+        ajustes: conf.ajustes || "",
+      };
+    }
+
+    async function api(path, options) {
+      const response = await fetch(path, options);
+      const text = await response.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+      if (!response.ok) throw new Error(typeof data === "string" ? data : (data.erro || JSON.stringify(data)));
+      return data;
+    }
+
+    function updateProgress(done, total) {
+      $("#progresso").value = total ? Math.round((done / total) * 100) : 0;
+    }
+
+    async function readBackup() {
+      const file = $("#arquivo").files[0];
+      if (!file) throw new Error("Selecione o arquivo de backup primeiro.");
+      const text = await file.text();
+      const backup = JSON.parse(text);
+      if (!backup || !Array.isArray(backup.pessoas) || !Array.isArray(backup.conferencias)) {
+        throw new Error("Arquivo inválido. Ele precisa ter pessoas e conferencias.");
+      }
+      return backup;
+    }
+
+    $("#arquivo").addEventListener("change", async () => {
+      try {
+        const backup = await readBackup();
+        setMetric("pessoas", backup.pessoas.length);
+        setMetric("conferencias", backup.conferencias.length);
+        log(`Arquivo carregado: ${backup.pessoas.length} pessoas e ${backup.conferencias.length} conferências.`, "ok");
+      } catch (err) {
+        log("Erro ao ler arquivo: " + err.message, "err");
+      }
+    });
+
+    $("#importar").addEventListener("click", async () => {
+      const button = $("#importar");
+      button.disabled = true;
+      try {
+        const backup = await readBackup();
+        setMetric("pessoas", backup.pessoas.length);
+        setMetric("conferencias", backup.conferencias.length);
+        setMetric("importadas", 0);
+        setMetric("puladas", 0);
+        updateProgress(0, backup.conferencias.length);
+
+        log("Conectando ao Supabase pelo site...", "ok");
+        const existentes = await api("/api/conferencias");
+        const assinaturas = new Set((existentes || []).map(signature));
+        log(`Conferências já no banco online: ${(existentes || []).length}`, "ok");
+
+        for (const pessoa of backup.pessoas) {
+          if (!pessoa.nome) continue;
+          await api("/api/pessoas", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ nome: pessoa.nome, tipo: pessoa.tipo || "operador" }),
+          });
+        }
+        log("Pessoas importadas/reativadas.", "ok");
+
+        let done = 0;
+        for (const original of backup.conferencias) {
+          const payload = confPayload(original);
+          const sig = signature(payload);
+          done += 1;
+          if (assinaturas.has(sig)) {
+            setMetric("puladas", state.puladas + 1);
+            log(`Pulada: caixa ${payload.numero_caixa || "-"} em ${payload.data || "-"}`, "warn");
+            updateProgress(done, backup.conferencias.length);
+            continue;
+          }
+          await api("/api/conferencias", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          assinaturas.add(sig);
+          setMetric("importadas", state.importadas + 1);
+          log(`Importada: caixa ${payload.numero_caixa || "-"} em ${payload.data || "-"}`, "ok");
+          updateProgress(done, backup.conferencias.length);
+        }
+
+        log(`Finalizado. Importadas: ${state.importadas}. Já existiam: ${state.puladas}.`, "ok");
+      } catch (err) {
+        log("Erro: " + err.message, "err");
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

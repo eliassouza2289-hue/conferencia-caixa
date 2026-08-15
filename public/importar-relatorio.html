@@ -159,6 +159,15 @@
       }
       return null;
     }
+    function inferQtdByMedia(total, section, mediaValues = null) {
+      if (!total) return 0;
+      const values = (mediaValues || moneyTokens(section).map((item) => item.val)).filter((val) => val > 0);
+      for (let qtd = 80; qtd >= 2; qtd -= 1) {
+        const media = total / qtd;
+        if (values.some((val) => Math.abs(val - media) <= 0.015)) return qtd;
+      }
+      return values.some((val) => Math.abs(val - total) <= 0.001) ? 1 : 0;
+    }
     function mergeCard(primary, fallback) {
       if (primary.valor || !fallback?.valor) return primary;
       return { ...primary, ...fallback, detectado: true };
@@ -179,8 +188,9 @@
           }
         }
         const lastPairs = pairs.slice(-2);
-        if (lastPairs[0]?.val) out[10] = { valor: lastPairs[0].val, qtd: 0 };
-        if (lastPairs[1]?.val) out[11] = { valor: lastPairs[1].val, qtd: 0 };
+        const pairValues = pairs.map((item) => item.val);
+        if (lastPairs[0]?.val) out[10] = { valor: lastPairs[0].val, qtd: inferQtdByMedia(lastPairs[0].val, section, pairValues) };
+        if (lastPairs[1]?.val) out[11] = { valor: lastPairs[1].val, qtd: inferQtdByMedia(lastPairs[1].val, section, pairValues) };
         if (header >= 0) {
           const vals = moneyTokens(section.slice(header));
           const medias = moneyTokens(section.slice(Math.max(0, header - 180), header)).slice(-4);

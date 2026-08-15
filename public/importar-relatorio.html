@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Importar relatório PDF - Conferência de Caixa</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <style>
+    :root{--bg:#f3f6f7;--panel:#fff;--line:#d8e1df;--ink:#111c18;--muted:#60706a;--brand:#16725a;--brand2:#0f4f3e;--bad:#b42318;--warn:#946200;--ok:#147444;--shadow:0 12px 30px rgba(20,38,32,.08)}
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#f7faf9 0,#eef4f2 100%);color:var(--ink);font-family:Arial,Helvetica,sans-serif}
+    header{position:sticky;top:0;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:14px 18px;display:flex;justify-content:space-between;gap:12px;align-items:center}
+    h1,h2,h3,p{margin:0} h1{font-size:22px} h2{font-size:17px}.muted{color:var(--muted);font-size:13px;line-height:1.45}
+    main{max-width:1180px;margin:0 auto;padding:14px;display:grid;gap:14px}
+    .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;box-shadow:var(--shadow)}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.top{display:flex;justify-content:space-between;gap:10px;align-items:center}
+    .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    label{display:grid;gap:5px;font-size:13px;font-weight:700}input,textarea{border:1px solid #bac7c1;border-radius:6px;padding:10px;background:#fff;font:inherit;width:100%;outline:none}textarea{min-height:130px}
+    button,a.button{border:1px solid var(--brand);background:var(--brand);color:#fff;border-radius:6px;padding:9px 12px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+    button.secondary,a.button.secondary{background:#fff;color:var(--brand2)}button:disabled{opacity:.55;cursor:wait}
+    .metric{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fbfcfb}.metric b{font-size:20px;display:block}.metric span{font-size:12px;color:var(--muted)}
+    .status{border-radius:999px;padding:4px 8px;font-size:12px;font-weight:800}.ok{background:#e7f6ee;color:var(--ok)}.warn{background:#fff3d9;color:var(--warn)}.bad{background:#fff0ee;color:var(--bad)}
+    table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border-bottom:1px solid var(--line);text-align:left;padding:8px;font-size:13px;vertical-align:top}th{background:#f5f8f7}
+    #preview{display:none}.notice{border-left:4px solid var(--brand);background:#eff8f5;border-radius:6px;padding:10px;color:var(--muted);font-size:13px;margin-top:10px}
+    @media(max-width:860px){header{align-items:flex-start;flex-direction:column}.grid,.grid2{grid-template-columns:1fr}button,a.button{width:100%}}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>📥 Importar relatório PDF</h1>
+      <p class="muted">Leia o fechamento de caixa e gere uma conferência pré-preenchida para revisão.</p>
+    </div>
+    <a class="button secondary" href="/">Voltar ao sistema</a>
+  </header>
+
+  <main>
+    <section class="panel">
+      <div class="top">
+        <div>
+          <h2>Selecionar relatório</h2>
+          <p class="muted">Use o PDF de fechamento de caixa. Nada é salvo automaticamente.</p>
+        </div>
+        <span class="status warn" id="status">Aguardando PDF</span>
+      </div>
+      <div class="grid2" style="margin-top:12px">
+        <label>Arquivo PDF<input id="pdfFile" type="file" accept="application/pdf,.pdf"></label>
+        <label>Responsável pela conferência<input id="responsavel" placeholder="Opcional, pode escolher depois"></label>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button id="lerPdf">Ler relatório</button>
+        <button class="secondary" id="usarExemplo" type="button">Limpar</button>
+      </div>
+      <div class="notice">O importador preenche dados e abre as etapas certas, mas deixa a conferência pendente para você confirmar comprovantes, romaneios e observações.</div>
+    </section>
+
+    <section class="panel" id="preview">
+      <div class="top">
+        <h2>Prévia encontrada</h2>
+        <button id="abrirConferencia">Abrir conferência preenchida</button>
+      </div>
+      <div class="grid" style="margin-top:12px" id="metrics"></div>
+      <div class="grid2" style="margin-top:12px">
+        <div>
+          <h3>Formas e valores</h3>
+          <table><thead><tr><th>Item</th><th>Qtd.</th><th>Valor</th></tr></thead><tbody id="formas"></tbody></table>
+        </div>
+        <div>
+          <h3>Tele-entrega e devoluções</h3>
+          <table><thead><tr><th>Item</th><th>Detalhe</th></tr></thead><tbody id="tele"></tbody></table>
+        </div>
+      </div>
+      <details style="margin-top:12px">
+        <summary class="muted">Ver texto lido do PDF</summary>
+        <textarea id="rawText" readonly></textarea>
+      </details>
+    </section>
+  </main>
+
+  <script type="module">
+    import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.min.mjs";
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.worker.min.mjs";
+
+    const $ = (s) => document.querySelector(s);
+    let draft = null;
+
+    function brDateToIso(value) {
+      const m = String(value || "").match(/(\d{2})\/(\d{2})\/(\d{4})/);
+      return m ? `${m[3]}-${m[2]}-${m[1]}` : "";
+    }
+    function money(value) {
+      const n = Number(String(value || "0").replace(/\./g, "").replace(",", "."));
+      return Number.isFinite(n) ? n : 0;
+    }
+    function moneyText(value) {
+      return money(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    }
+    function norm(text) {
+      return String(text || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\uFFFD/g, "?").toUpperCase();
+    }
+    function valueAfter(text, pattern) {
+      const m = text.match(pattern);
+      return m ? m[1] : "";
+    }
+    function cardLine(text, code, label) {
+      const re = new RegExp(`\\b${code}\\s+${label}\\s+([\\d.]+,\\d{2})\\s+(\\d+)\\b`, "im");
+      const m = norm(text).match(re);
+      return { qtd: m ? Number(m[2]) : 0, valor: m ? money(m[1]) : 0 };
+    }
+    function addQuestion(perguntas, texto, obs) {
+      if (obs) perguntas[texto] = { status: "", tipo: "Importado do PDF", obs };
+    }
+    function extractTeleMovimentos(text, caixaAtual) {
+      const lines = text.split(/\r?\n/);
+      const movs = [];
+      let inSection = false;
+      for (const raw of lines) {
+        const line = raw.trim();
+        const upper = norm(line);
+        if (upper.includes("VENDAS TELE-ENTR.FINAL.OUTRO CAIXA")) {
+          inSection = true;
+          continue;
+        }
+        if (inSection && (upper.includes("VENDAS REALIZADAS NESTE CAIXA") || upper.includes("PAGINA 4"))) break;
+        if (!inSection || !/^\d{5,}\s+/.test(line)) continue;
+        const tail = line.match(/(\d+)\s+(\d+)\s+(\d+)\s+([\d.]+,\d{2})\s+([\d.]+,\d{2})$/);
+        const head = line.match(/^\d+\s+(.+?)\s+\d{2}\/\d{2}\/\d{4}/);
+        if (!tail) continue;
+        const origem = tail[2];
+        const retorno = tail[3];
+        const valor = tail[4];
+        const forma = head ? head[1].trim() : "Tele";
+        if (retorno === caixaAtual && origem !== caixaAtual) {
+          movs.push({ tipo: "recebida", caixa: origem, qtd: 1, obs: `${forma} - ${moneyText(valor)}` });
+        } else if (origem === caixaAtual && retorno !== caixaAtual) {
+          movs.push({ tipo: "enviada", caixa: retorno, qtd: 1, obs: `${forma} - ${moneyText(valor)}` });
+        }
+      }
+      return movs;
+    }
+    async function readPdf(file) {
+      const data = new Uint8Array(await file.arrayBuffer());
+      const pdf = await pdfjsLib.getDocument({ data }).promise;
+      const pages = [];
+      for (let i = 1; i <= pdf.numPages; i += 1) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const rows = new Map();
+        for (const item of content.items) {
+          const y = Math.round(item.transform[5]);
+          const x = item.transform[4];
+          if (!rows.has(y)) rows.set(y, []);
+          rows.get(y).push({ x, text: item.str });
+        }
+        const lines = [...rows.entries()]
+          .sort((a, b) => b[0] - a[0])
+          .map(([, items]) => items.sort((a, b) => a.x - b.x).map((item) => item.text).join(" ").replace(/\s+/g, " ").trim())
+          .filter(Boolean);
+        pages.push(lines.join("\n"));
+      }
+      return pages.join("\n");
+    }
+    function buildDraft(text) {
+      const clean = norm(text);
+      const header = text.match(/Caixa:\s*(\d+)\s*-\s*(.*?)\.\s*ABERTURA:\s*(\d{2}\/\d{2}\/\d{4})\s+[\d:]+\s*\|\s*FECHAMENTO:\s*(\d{2}\/\d{2}\/\d{4})/i);
+      const caixa = header ? header[1] : "";
+      const operador = header ? header[2].trim().replace(/\s+/g, " ") : "";
+      const data = brDateToIso(header ? header[4] : valueAfter(text, /Data:\s*(\d{2}\/\d{2}\/\d{4})/i));
+      const abertura = valueAfter(text, /ABERTURA DE CAIXA:\s*([\d.]+,\d{2})/i);
+      const dinheiro = valueAfter(text, /VENDAS DINHEIRO:\s*([\d.]+,\d{2})/i);
+      const cartao = valueAfter(text, /VENDAS CART[�AÃ?]+O:\s*([\d.]+,\d{2})/i);
+      const crediario = valueAfter(text, /VENDAS CREDI[�AÃ?]+RIO:\s*([\d.]+,\d{2})/i);
+      const convenio = valueAfter(text, /VENDAS CONV[�EÊ?]+NIO:\s*([\d.]+,\d{2})/i);
+      const reembolso = valueAfter(text, /REEMBOLSO:\s*([\d.]+,\d{2})/i);
+      const sangria = valueAfter(text, /SANGRIA DINHEIRO\s+Sa\S*da\s+([\d.]+,\d{2})/i) || valueAfter(text, /MOVIMENTO CAIXA DINHEIRO:\s*([\d.]+,\d{2})/i);
+      const teleResumo = clean.match(/VENDAS:\s*(\d+)\s+([\d.]+,\d{2})\s+\d/);
+      const pixOff = cardLine(text, 10, "PIX OFFLINE");
+      const ifood = cardLine(text, 11, "PAGAMENTO ONLINE IFOOD");
+      const tefCredito = cardLine(text, 13, "TEF CREDITO");
+      const tefDebito = cardLine(text, 14, "TEF DEBITO");
+      const pos = cardLine(text, 15, "CARTAO POS");
+      const tefPix = cardLine(text, 17, "TEF PIX");
+      const devolucoes = {
+        dinheiro: money(valueAfter(text, /DEVOLU\S*O VENDAS DINHEIRO:\s*([\d.]+,\d{2})/i)),
+        cartao: money(valueAfter(text, /DEVOLU\S*O VENDAS CART\S*O:\s*([\d.]+,\d{2})/i)),
+        crediario: money(valueAfter(text, /DEVOLU\S*O VENDAS CREDI\S*RIO:\s*([\d.]+,\d{2})/i)),
+        convenio: money(valueAfter(text, /DEVOLU\S*O VENDAS CONV\S*NIO:\s*([\d.]+,\d{2})/i)),
+        resumoQtd: Number((clean.match(/DEVOLU\S*ES:\s*(\d+)/) || [0, 0])[1]),
+      };
+      devolucoes.total = devolucoes.dinheiro + devolucoes.cartao + devolucoes.crediario + devolucoes.convenio;
+      const teleMovimentos = extractTeleMovimentos(text, caixa);
+      const teleBase = teleResumo ? Number(teleResumo[1]) : 0;
+      const recebidas = teleMovimentos.filter((m) => m.tipo === "recebida").length;
+      const enviadas = teleMovimentos.filter((m) => m.tipo === "enviada").length;
+      const perguntas = {};
+      addQuestion(perguntas, "Valor de abertura conferido", abertura ? `Abertura no PDF: ${moneyText(abertura)}` : "");
+      addQuestion(perguntas, "Valor de fechamento conferido", dinheiro ? `Vendas dinheiro no PDF: ${moneyText(dinheiro)}` : "");
+      addQuestion(perguntas, "Sangria contada fisicamente", sangria ? `Sangria/movimento no PDF: ${moneyText(sangria)}` : "");
+      addQuestion(perguntas, "Cartões POS conferidos", pos.valor ? `POS no PDF: ${pos.qtd} venda(s), ${moneyText(pos.valor)}` : "");
+      addQuestion(perguntas, "TEF débito conferido", tefDebito.valor ? `TEF débito no PDF: ${tefDebito.qtd} venda(s), ${moneyText(tefDebito.valor)}` : "");
+      addQuestion(perguntas, "TEF crédito conferido", tefCredito.valor ? `TEF crédito no PDF: ${tefCredito.qtd} venda(s), ${moneyText(tefCredito.valor)}` : "");
+      addQuestion(perguntas, "TEF Pix conferido", tefPix.valor ? `TEF Pix no PDF: ${tefPix.qtd} venda(s), ${moneyText(tefPix.valor)}` : "");
+      addQuestion(perguntas, "Comprovante pix conferido", pixOff.valor ? `Pix offline no PDF: ${pixOff.qtd} venda(s), ${moneyText(pixOff.valor)}` : "");
+      addQuestion(perguntas, "Romaneio Ifood conferido", ifood.valor ? `iFood no PDF: ${ifood.qtd} venda(s), ${moneyText(ifood.valor)}` : "");
+      addQuestion(perguntas, "Recebimento de crediário conferido", money(crediario) ? `Crediário no PDF: ${moneyText(crediario)}` : "");
+      addQuestion(perguntas, "Recebimento de convênio conferido", money(convenio) ? `Convênio no PDF: ${moneyText(convenio)}` : "");
+      addQuestion(perguntas, "Devoluções conferidas", devolucoes.total || devolucoes.resumoQtd ? `Devoluções no PDF: ${devolucoes.resumoQtd} ocorrência(s), ${moneyText(String(devolucoes.total).replace(".", ","))}` : "");
+      const gates = {
+        tele: teleBase || teleMovimentos.length ? "sim" : "nao",
+        cartao_pos: pos.valor ? "sim" : "nao",
+        tef: tefCredito.valor || tefDebito.valor || tefPix.valor ? "sim" : "nao",
+        pix_off: pixOff.valor ? "sim" : "nao",
+        ifood: ifood.valor ? "sim" : "nao",
+        crediario: money(crediario) ? "sim" : "nao",
+        convenio: money(convenio) ? "sim" : "nao",
+        devolucoes: devolucoes.total || devolucoes.resumoQtd ? "sim" : "nao",
+      };
+      const resumo = [
+        `Importado de PDF. Revise antes de salvar.`,
+        abertura ? `Abertura: ${moneyText(abertura)}` : "",
+        dinheiro ? `Dinheiro: ${moneyText(dinheiro)}` : "",
+        cartao ? `Cartão total: ${moneyText(cartao)}` : "",
+        reembolso ? `Reembolso: ${moneyText(reembolso)}` : "",
+        sangria ? `Sangria/movimento: ${moneyText(sangria)}` : "",
+        devolucoes.total || devolucoes.resumoQtd ? `Devoluções: ${devolucoes.resumoQtd} ocorrência(s), ${moneyText(String(devolucoes.total).replace(".", ","))}` : "",
+      ].filter(Boolean).join("\n");
+      return {
+        data,
+        numero_caixa: caixa,
+        operador,
+        responsavel: $("#responsavel").value.trim(),
+        status: "pendente",
+        gates,
+        perguntas,
+        checklist: [],
+        tele: { teve: gates.tele, base: teleBase, movimentos: teleMovimentos, total: teleBase + recebidas - enviadas },
+        observacao_erro: resumo,
+        ajustes: "",
+        _preview: { abertura, dinheiro, cartao, crediario, convenio, reembolso, sangria, teleBase, pixOff, ifood, tefCredito, tefDebito, tefPix, pos, devolucoes, teleMovimentos },
+      };
+    }
+    function renderPreview(d) {
+      $("#preview").style.display = "block";
+      $("#metrics").innerHTML = [
+        ["📦 Caixa", d.numero_caixa || "-"],
+        ["👤 Operador", d.operador || "-"],
+        ["📅 Data", d.data ? d.data.split("-").reverse().join("/") : "-"],
+        ["🚦 Status", "Pendente para revisão"],
+      ].map(([t, v]) => `<div class="metric"><b>${v}</b><span>${t}</span></div>`).join("");
+      const p = d._preview;
+      const formas = [
+        ["Dinheiro", "", p.dinheiro],
+        ["Cartão total", "", p.cartao],
+        ["Cartão POS", p.pos.qtd, p.pos.valor],
+        ["TEF crédito", p.tefCredito.qtd, p.tefCredito.valor],
+        ["TEF débito", p.tefDebito.qtd, p.tefDebito.valor],
+        ["TEF Pix", p.tefPix.qtd, p.tefPix.valor],
+        ["Pix offline", p.pixOff.qtd, p.pixOff.valor],
+        ["iFood", p.ifood.qtd, p.ifood.valor],
+        ["Crediário", "", p.crediario],
+        ["Convênio", "", p.convenio],
+      ];
+      $("#formas").innerHTML = formas.map(([nome, qtd, val]) => `<tr><td>${nome}</td><td>${qtd || "-"}</td><td>${typeof val === "number" ? val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : (val ? moneyText(val) : "-")}</td></tr>`).join("");
+      const teleRows = [
+        ["Teles no fechamento", `${p.teleBase || 0}`],
+        ["Teles recebidas/enviadas", p.teleMovimentos.length ? p.teleMovimentos.map((m) => `${m.tipo} ${m.caixa}: ${m.obs}`).join("<br>") : "Nenhuma movimentação encontrada"],
+        ["Devoluções", `${p.devolucoes.resumoQtd || 0} ocorrência(s), ${p.devolucoes.total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`],
+      ];
+      $("#tele").innerHTML = teleRows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join("");
+    }
+    $("#lerPdf").onclick = async () => {
+      const file = $("#pdfFile").files[0];
+      if (!file) {
+        alert("Selecione um PDF primeiro.");
+        return;
+      }
+      $("#lerPdf").disabled = true;
+      $("#status").className = "status warn";
+      $("#status").textContent = "Lendo PDF...";
+      try {
+        const text = await readPdf(file);
+        $("#rawText").value = text;
+        draft = buildDraft(text);
+        renderPreview(draft);
+        $("#status").className = "status ok";
+        $("#status").textContent = "Prévia pronta";
+      } catch (err) {
+        $("#status").className = "status bad";
+        $("#status").textContent = "Erro na leitura";
+        alert("Não consegui ler esse PDF: " + (err.message || err));
+      } finally {
+        $("#lerPdf").disabled = false;
+      }
+    };
+    $("#abrirConferencia").onclick = () => {
+      if (!draft) return;
+      const clean = { ...draft };
+      delete clean._preview;
+      localStorage.setItem("conferencia_pdf_draft", JSON.stringify(clean));
+      location.href = "/";
+    };
+    $("#usarExemplo").onclick = () => {
+      $("#pdfFile").value = "";
+      $("#responsavel").value = "";
+      $("#preview").style.display = "none";
+      $("#rawText").value = "";
+      draft = null;
+      $("#status").className = "status warn";
+      $("#status").textContent = "Aguardando PDF";
+    };
+  </script>
+</body>
+</html>

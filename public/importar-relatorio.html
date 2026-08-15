@@ -102,8 +102,33 @@
       const m = text.match(pattern);
       return m ? m[1] : "";
     }
+    function normLines(text) {
+      return norm(text).split(/\r?\n/).map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+    }
+    function labelPattern(label) {
+      return norm(label)
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+        .replace(/A/g, "[A?]")
+        .replace(/E/g, "[E?]")
+        .replace(/I/g, "[I?]")
+        .replace(/O/g, "[O?]")
+        .replace(/U/g, "[U?]")
+        .replace(/C/g, "[C?]");
+    }
+    function valueFromLine(lines, label) {
+      const re = new RegExp(labelPattern(label) + "\\s*(?:[A-Z? ]{0,35})?\\s*:?\\s*([\\d.]+,\\d{2})", "i");
+      const line = lines.find((item) => re.test(item));
+      const m = line ? line.match(re) : null;
+      return m ? m[1] : "";
+    }
+    function numberFromLine(lines, label) {
+      const re = new RegExp(labelPattern(label) + "\\s*:?\\s*(\\d+)", "i");
+      const line = lines.find((item) => re.test(item));
+      const m = line ? line.match(re) : null;
+      return m ? Number(m[1]) : 0;
+    }
     function cardLine(text, code, label) {
-      const re = new RegExp(`\\b${code}\\s+${label}\\s+([\\d.]+,\\d{2})\\s+(\\d+)\\b`, "im");
+      const re = new RegExp(`\\b${code}\\s+${labelPattern(label)}\\s+([\\d.]+,\\d{2})\\s+(\\d+)\\b`, "im");
       const m = norm(text).match(re);
       return { qtd: m ? Number(m[2]) : 0, valor: m ? money(m[1]) : 0 };
     }
@@ -162,18 +187,24 @@
     }
     function buildDraft(text) {
       const clean = norm(text);
-      const header = text.match(/Caixa:\s*(\d+)\s*-\s*(.*?)\.\s*ABERTURA:\s*(\d{2}\/\d{2}\/\d{4})\s+[\d:]+\s*\|\s*FECHAMENTO:\s*(\d{2}\/\d{2}\/\d{4})/i);
-      const caixa = header ? header[1] : "";
-      const operador = header ? header[2].trim().replace(/\s+/g, " ") : "";
-      const data = brDateToIso(header ? header[4] : valueAfter(text, /Data:\s*(\d{2}\/\d{2}\/\d{4})/i));
-      const abertura = valueAfter(text, /ABERTURA DE CAIXA:\s*([\d.]+,\d{2})/i);
-      const dinheiro = valueAfter(text, /VENDAS DINHEIRO:\s*([\d.]+,\d{2})/i);
-      const cartao = valueAfter(text, /VENDAS CART[�AÃ?]+O:\s*([\d.]+,\d{2})/i);
-      const crediario = valueAfter(text, /VENDAS CREDI[�AÃ?]+RIO:\s*([\d.]+,\d{2})/i);
-      const convenio = valueAfter(text, /VENDAS CONV[�EÊ?]+NIO:\s*([\d.]+,\d{2})/i);
-      const reembolso = valueAfter(text, /REEMBOLSO:\s*([\d.]+,\d{2})/i);
-      const sangria = valueAfter(text, /SANGRIA DINHEIRO\s+Sa\S*da\s+([\d.]+,\d{2})/i) || valueAfter(text, /MOVIMENTO CAIXA DINHEIRO:\s*([\d.]+,\d{2})/i);
-      const teleResumo = clean.match(/VENDAS:\s*(\d+)\s+([\d.]+,\d{2})\s+\d/);
+      const lines = normLines(text);
+      const headerLine = text.split(/\r?\n/).find((line) => /Caixa:/i.test(line) && /ABERTURA:/i.test(line)) || "";
+      const headerSource = headerLine || text;
+      const header = headerSource.match(/Caixa:\s*(\d+)\s*-\s*([\s\S]{0,160}?)\.?\s*ABERTURA:\s*(\d{2}\/\d{2}\/\d{4})\s+[\d:]+\s*\|\s*FECHAMENTO:\s*(\d{2}\/\d{2}\/\d{4})/i);
+      const operadorFallback = valueAfter(text, /Caixa:\s*\d+\s*-\s*([\s\S]{0,160}?)\.?\s*ABERTURA:/i).trim().replace(/\s+/g, " ");
+      const fechamentoFallback = valueAfter(text, /FECHAMENTO:\s*(\d{2}\/\d{2}\/\d{4})/i) || valueAfter(text, /Data:\s*(\d{2}\/\d{2}\/\d{4})/i);
+      const caixa = header ? header[1] : valueAfter(clean, /CAIXA:\s*(\d+)/i);
+      const operador = header ? header[2].trim().replace(/\s+/g, " ") : operadorFallback;
+      const data = brDateToIso(header ? header[4] : fechamentoFallback);
+      const abertura = valueFromLine(lines, "ABERTURA DE CAIXA");
+      const dinheiro = valueFromLine(lines, "VENDAS DINHEIRO");
+      const cartao = valueFromLine(lines, "VENDAS CARTAO");
+      const crediario = valueFromLine(lines, "VENDAS CREDIARIO");
+      const convenio = valueFromLine(lines, "VENDAS CONVENIO");
+      const reembolso = valueFromLine(lines, "REEMBOLSO");
+      const sangria = valueFromLine(lines, "SANGRIA DINHEIRO") || valueFromLine(lines, "MOVIMENTO CAIXA DINHEIRO");
+      const teleLine = lines.find((line) => /VENDAS:\s*\d+\s+[\d.]+,\d{2}/.test(line));
+      const teleResumo = teleLine ? teleLine.match(/VENDAS:\s*(\d+)\s+([\d.]+,\d{2})/) : null;
       const pixOff = cardLine(text, 10, "PIX OFFLINE");
       const ifood = cardLine(text, 11, "PAGAMENTO ONLINE IFOOD");
       const tefCredito = cardLine(text, 13, "TEF CREDITO");
@@ -181,11 +212,11 @@
       const pos = cardLine(text, 15, "CARTAO POS");
       const tefPix = cardLine(text, 17, "TEF PIX");
       const devolucoes = {
-        dinheiro: money(valueAfter(text, /DEVOLU\S*O VENDAS DINHEIRO:\s*([\d.]+,\d{2})/i)),
-        cartao: money(valueAfter(text, /DEVOLU\S*O VENDAS CART\S*O:\s*([\d.]+,\d{2})/i)),
-        crediario: money(valueAfter(text, /DEVOLU\S*O VENDAS CREDI\S*RIO:\s*([\d.]+,\d{2})/i)),
-        convenio: money(valueAfter(text, /DEVOLU\S*O VENDAS CONV\S*NIO:\s*([\d.]+,\d{2})/i)),
-        resumoQtd: Number((clean.match(/DEVOLU\S*ES:\s*(\d+)/) || [0, 0])[1]),
+        dinheiro: money(valueFromLine(lines, "DEVOLUCAO VENDAS DINHEIRO")),
+        cartao: money(valueFromLine(lines, "DEVOLUCAO VENDAS CARTAO")),
+        crediario: money(valueFromLine(lines, "DEVOLUCAO VENDAS CREDIARIO")),
+        convenio: money(valueFromLine(lines, "DEVOLUCAO VENDAS CONVENIO")),
+        resumoQtd: numberFromLine(lines, "DEVOLUCOES"),
       };
       devolucoes.total = devolucoes.dinheiro + devolucoes.cartao + devolucoes.crediario + devolucoes.convenio;
       const teleMovimentos = extractTeleMovimentos(text, caixa);

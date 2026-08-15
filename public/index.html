@@ -58,7 +58,6 @@ button{border:1px solid var(--brand);background:var(--brand);color:white;border-
     <button class="btn-quiet" data-tab="relatorios">📊 Relatórios</button>
     <button class="btn-quiet" data-tab="cadastros">👥 Cadastros</button>
     <button class="btn-quiet" id="toggleReport">🔎 Ocultar filtros</button>
-    <button class="btn-quiet" id="testDb">🔌 Testar banco</button>
     <button class="btn-main" data-export-pdf>📄 Exportar PDF</button>
   </div>
 </header>
@@ -75,13 +74,16 @@ button{border:1px solid var(--brand);background:var(--brand);color:white;border-
           <label>🧑‍💼 Responsável<select id="responsavel" required></select></label>
         </div>
         <div class="notice" id="teleAviso"></div>
+
         <div class="top" style="margin-top:14px">
           <div class="section-title" style="margin:0">✅ Etapas obrigatórias</div>
           <button type="button" class="secondary small" id="allOk">✅ Marcar tudo OK</button>
         </div>
         <div class="panel" style="padding:8px;margin-top:8px" id="fixedQuestions"></div>
+
         <div class="section-title">⚙️ Etapas condicionais</div>
         <div id="gates"></div>
+
         <div class="grid2" style="margin-top:12px">
           <label>📝 Observação geral<textarea id="obs"></textarea></label>
           <label>🛠️ Ajustes realizados<textarea id="ajustes"></textarea></label>
@@ -93,10 +95,47 @@ button{border:1px solid var(--brand);background:var(--brand);color:white;border-
         </div>
       </form>
     </section>
-    <section id="relatorios" class="view"><div class="panel"><div class="report-title"><h2>📊 Relatórios</h2><button class="secondary btn-quiet" data-export-pdf>📄 Exportar PDF</button></div><div id="listaFull"></div></div></section>
-    <section id="cadastros" class="view"><div class="grid2"><div class="panel"><h2>👥 Operadores e responsáveis</h2><div class="grid2" style="margin-top:12px"><label>Nome<input id="pessoaNome"></label><label>Tipo<select id="pessoaTipo"><option value="operador">Operador</option><option value="responsavel">Responsável</option></select></label></div><button style="margin-top:10px" id="addPessoa">Cadastrar</button><table class="table"><thead><tr><th>Nome</th><th>Tipo</th><th></th></tr></thead><tbody id="pessoasTabela"></tbody></table></div><div class="panel"><h2>📦 Caixa digitado na conferência</h2><p class="muted" style="margin-top:8px">O número do caixa não precisa mais de cadastro. Digite no campo da conferência e ele será salvo junto do fechamento.</p></div></div></section>
+
+    <section id="relatorios" class="view">
+      <div class="panel">
+        <div class="report-title"><h2>📊 Relatórios</h2><button class="secondary btn-quiet" data-export-pdf>📄 Exportar PDF</button></div>
+        <div id="listaFull"></div>
+      </div>
+    </section>
+
+    <section id="cadastros" class="view">
+      <div class="grid2">
+        <div class="panel">
+          <h2>👥 Operadores e responsáveis</h2>
+          <div class="grid2" style="margin-top:12px">
+            <label>Nome<input id="pessoaNome"></label>
+            <label>Tipo<select id="pessoaTipo"><option value="operador">Operador</option><option value="responsavel">Responsável</option></select></label>
+          </div>
+          <button style="margin-top:10px" id="addPessoa">Cadastrar</button>
+          <table class="table"><thead><tr><th>Nome</th><th>Tipo</th><th></th></tr></thead><tbody id="pessoasTabela"></tbody></table>
+        </div>
+        <div class="panel">
+          <h2>📦 Caixa digitado na conferência</h2>
+          <p class="muted" style="margin-top:8px">O número do caixa não precisa mais de cadastro. Digite no campo da conferência e ele será salvo junto do fechamento.</p>
+        </div>
+      </div>
+    </section>
   </main>
-  <aside class="panel"><div class="top"><h2>🔎 Filtros e relatório</h2><span class="muted" id="count">0 registros</span></div><form id="filters" class="grid2 filters"><label>De<input type="date" name="data_inicio"></label><label>Até<input type="date" name="data_fim"></label><label>Colaborador<input name="colaborador"></label><label>Caixa<input name="numero_caixa"></label><label>🚦 Status<select name="status"><option value="">Todos</option><option value="divergencia">Somente com erro</option><option value="pendente">Pendentes</option><option value="liberado">Sem erro</option></select></label><button>🔎 Filtrar</button><button type="button" class="secondary" id="limparFiltro">📋 Todos</button></form><div class="metrics" id="metrics" style="margin-top:12px"></div><div id="lista"></div></aside>
+
+  <aside class="panel">
+    <div class="top"><h2>🔎 Filtros e relatório</h2><span class="muted" id="count">0 registros</span></div>
+    <form id="filters" class="grid2 filters">
+      <label>De<input type="date" name="data_inicio"></label>
+      <label>Até<input type="date" name="data_fim"></label>
+      <label>Colaborador<input name="colaborador"></label>
+      <label>Caixa<input name="numero_caixa"></label>
+      <label>🚦 Status<select name="status"><option value="">Todos</option><option value="divergencia">Somente com erro</option><option value="pendente">Pendentes</option><option value="liberado">Sem erro</option></select></label>
+      <button>🔎 Filtrar</button>
+      <button type="button" class="secondary" id="limparFiltro">📋 Todos</button>
+    </form>
+    <div class="metrics" id="metrics" style="margin-top:12px"></div>
+    <div id="lista"></div>
+  </aside>
 </div>
 <script>
 const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
@@ -105,8 +144,20 @@ const hoje=()=>new Date().toISOString().slice(0,10);
 const dataBR=d=>d?d.split('-').reverse().join('/'):'';
 const erroMsg=e=>String(e?.message||e).replace(/[{}"]/g,'').slice(0,600);
 let options={pessoas:[]}, teleMovs=[], pending=[], lastReport=[], alertTimer=null;
-const fixedGroups=[['1. 🖨️ Impressão de relatórios',[],['Relatório de fechamento de caixa impresso','Relação de vendas (Tele entrega)','Relação de vendas (Forma de pagamento 10, 11, 13, 14, 15 e 17)']],['2. 💰 Conferência de sangrias, abertura e fechamento',['Valor de abertura conferido','Valor de fechamento conferido','Sangria contada fisicamente','Diferença de caixa verificada']]];
-const gates=[['tele','3. 🛵 Conferência de tele-entrega',['Quantidade de romaneios confere','Todos os romaneios batem com o relatório','Romaneios de Tele entrega vindo de outro caixa conferidos','Não ficou romaneio pendente','Não ficou valor pendente com motoboy']],['cartao_pos','4. 💳 Conferência de cartão POS',['Cartões POS conferidos','Comprovantes POS conferidos']],['tef','5. 🧾 Conferência de TEF débito, crédito e Pix',['TEF débito conferido','TEF crédito conferido','TEF Pix conferido']],['pix_off','6. 💠 Conferência de Pix off',['Comprovante pix conferido','Conferido recebimento no banco destino']],['ifood','7. 🍽️ Conferência de iFood',['Romaneio Ifood conferido','Recebimento Ifood conferido']],['crediario','8. 💰 Recebimento de crediário',['Recebimento de crediário conferido','Baixas/lançamentos de crediário conferidos','Comprovantes de crediário separados']],['convenio','9. 🤝 Recebimento de convênio',['Recebimento de convênio conferido','Baixas/lançamentos de convênio conferidos','Comprovantes de convênio separados']],['devolucoes','10. ↩️ Devoluções',['Devoluções conferidas','Documentos de devolução separados']]];
+const fixedGroups=[
+  ['1. 🖨️ Impressão de relatórios',[],['Relatório de fechamento de caixa impresso','Relação de vendas (Tele entrega)','Relação de vendas (Forma de pagamento 10, 11, 13, 14, 15 e 17)']],
+  ['2. 💰 Conferência de sangrias, abertura e fechamento',['Valor de abertura conferido','Valor de fechamento conferido','Sangria contada fisicamente','Diferença de caixa verificada']]
+];
+const gates=[
+  ['tele','3. 🛵 Conferência de tele-entrega',['Quantidade de romaneios confere','Todos os romaneios batem com o relatório','Romaneios de Tele entrega vindo de outro caixa conferidos','Não ficou romaneio pendente','Não ficou valor pendente com motoboy']],
+  ['cartao_pos','4. 💳 Conferência de cartão POS',['Cartões POS conferidos','Comprovantes POS conferidos']],
+  ['tef','5. 🧾 Conferência de TEF débito, crédito e Pix',['TEF débito conferido','TEF crédito conferido','TEF Pix conferido']],
+  ['pix_off','6. 💠 Conferência de Pix off',['Comprovante pix conferido','Conferido recebimento no banco destino']],
+  ['ifood','7. 🍽️ Conferência de iFood',['Romaneio Ifood conferido','Recebimento Ifood conferido']],
+  ['crediario','8. 💰 Recebimento de crediário',['Recebimento de crediário conferido','Baixas/lançamentos de crediário conferidos','Comprovantes de crediário separados']],
+  ['convenio','9. 🤝 Recebimento de convênio',['Recebimento de convênio conferido','Baixas/lançamentos de convênio conferidos','Comprovantes de convênio separados']],
+  ['devolucoes','10. ↩️ Devoluções',['Devoluções conferidas','Documentos de devolução separados']]
+];
 async function api(url,opt){let r=await fetch(url,opt);let t=await r.text();if(!r.ok)throw new Error(t||'Falha no servidor');return t?JSON.parse(t):{}}
 function fill(sel,items,empty){sel.innerHTML='<option value="">'+empty+'</option>'+items.map(x=>'<option>'+esc(x.nome||x)+'</option>').join('')}
 function question(text,val={}){let st=val.status||'';return `<div class="question ${st==='erro'?'erro':''}" data-q="${esc(text)}" data-status="${esc(st)}"><div>${esc(text)}</div><div class="row seg"><button type="button" class="secondary small ${st==='ok'?'active':''}" data-status="ok">✅ OK</button><button type="button" class="secondary small ${st==='erro'?'active':''}" data-status="erro">❌ Erro</button><button type="button" class="secondary small ${st==='na'?'active':''}" data-status="na">➖ N/A</button></div><div class="qextra"><select><option>Valor divergente</option><option>Documento faltante</option><option>Comprovante faltante</option><option>Lançamento incorreto</option><option>Romaneio pendente</option><option>Sangria divergente</option><option>Outro</option></select><input placeholder="Observação rápida" value="${esc(val.obs||'')}"></div></div>`}
@@ -142,7 +193,6 @@ document.addEventListener('input',e=>{if(e.target.id==='teleBase')renderTele();i
 form.onsubmit=async e=>{e.preventDefault();msg.textContent='Salvando...';msg.style.color='';try{let id=confId.value, body=JSON.stringify(payload());await api(id?'/api/conferencias/'+id:'/api/conferencias',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body});msg.textContent='Salvo no banco online';msg.style.color='#147444';novoForm();renderReport()}catch(err){msg.textContent='Não salvou: '+erroMsg(err);msg.style.color='#b42318';alert(msg.textContent)}};
 allOk.onclick=()=>{$$('.question').forEach(q=>{q.dataset.status='ok';q.classList.remove('erro');q.querySelectorAll('[data-status]').forEach(b=>b.classList.toggle('active',b.dataset.status==='ok'))});updateStatus()};
 novo.onclick=novoForm;caixa.onchange=loadAlerts;caixa.onblur=loadAlerts;toggleReport.onclick=()=>{document.body.classList.toggle('hide-report');toggleReport.textContent=document.body.classList.contains('hide-report')?'🔎 Mostrar filtros':'🔎 Ocultar filtros'};filters.onsubmit=e=>{e.preventDefault();renderReport()};limparFiltro.onclick=()=>{filters.reset();renderReport()};
-testDb.onclick=async()=>{try{let s=await api('/api/status');alert(`Banco: ${s.banco}\nPessoas: ${s.pessoas}`)}catch(err){alert('Erro no banco: '+erroMsg(err))}};
 addPessoa.onclick=async()=>{if(!pessoaNome.value.trim())return;try{await api('/api/pessoas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome:pessoaNome.value.trim(),tipo:pessoaTipo.value})});pessoaNome.value='';await loadOptions()}catch(err){alert('Não cadastrou: '+erroMsg(err))}};
 (async()=>{try{let s=await api('/api/status');dbText.textContent=s.banco+' | pessoas '+s.pessoas;await loadOptions();novoForm();renderReport()}catch(err){dbText.textContent='Erro no banco';alert('Erro ao carregar banco: '+erroMsg(err))}})();
 </script>

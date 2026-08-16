@@ -21,6 +21,7 @@
     .metric{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fbfcfb}.metric b{font-size:20px;display:block}.metric span{font-size:12px;color:var(--muted)}
     .status{border-radius:999px;padding:4px 8px;font-size:12px;font-weight:800}.ok{background:#e7f6ee;color:var(--ok)}.warn{background:#fff3d9;color:var(--warn)}.bad{background:#fff0ee;color:var(--bad)}
     table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border-bottom:1px solid var(--line);text-align:left;padding:8px;font-size:13px;vertical-align:top}th{background:#f5f8f7}
+    .check-list{display:grid;gap:6px}.check-item{display:flex;gap:8px;align-items:flex-start;border:1px solid var(--line);border-radius:6px;padding:7px;background:#fbfcfb}.check-item input{width:auto;margin-top:2px}.check-item b{display:block}.check-item span{color:var(--muted);font-size:12px}
     #preview{display:none}.notice{border-left:4px solid var(--brand);background:#eff8f5;border-radius:6px;padding:10px;color:var(--muted);font-size:13px;margin-top:10px}
     @media(max-width:860px){header{align-items:flex-start;flex-direction:column}.grid,.grid2,.grid3{grid-template-columns:1fr}button,a.button{width:100%}}
   </style>
@@ -39,21 +40,19 @@
       <div class="top">
         <div>
           <h2>Selecionar relatório</h2>
-          <p class="muted">Use o HTML de fechamento e, se quiser, os relatórios auxiliares de cartões e tele-entrega.</p>
+          <p class="muted">Selecione os HTMLs juntos. O sistema identifica fechamento, cartões e tele-entrega automaticamente.</p>
         </div>
         <span class="status warn" id="status">Aguardando HTML</span>
       </div>
-      <div class="grid3" style="margin-top:12px">
-        <label>Fechamento HTML<input id="htmlFile" type="file" accept="text/html,.html,.htm"></label>
-        <label>Relação cartões HTML<input id="cartoesFile" type="file" accept="text/html,.html,.htm"></label>
-        <label>Relação tele HTML<input id="teleFile" type="file" accept="text/html,.html,.htm"></label>
+      <div class="grid2" style="margin-top:12px">
+        <label>Relatórios HTML<input id="htmlFiles" type="file" accept="text/html,.html,.htm" multiple></label>
         <label>Responsável pela conferência<input id="responsavel" placeholder="Opcional, pode escolher depois"></label>
       </div>
       <div class="row" style="margin-top:12px">
         <button id="lerHtml">Ler relatório</button>
         <button class="secondary" id="usarExemplo" type="button">Limpar</button>
       </div>
-      <div class="notice">O importador preenche dados e abre as etapas certas, mas deixa a conferência pendente para você confirmar comprovantes, romaneios e observações.</div>
+      <div class="notice">Pode selecionar os 3 arquivos de uma vez. O fechamento é obrigatório; cartões e tele são usados para a pré-checagem.</div>
     </section>
 
     <section class="panel" id="preview">
@@ -446,6 +445,14 @@
       "PIX OFFLINE": "Pix offline",
       "PAGAMENTO ONLINE IFOOD": "iFood",
     };
+    const auxQuestionByLabel = {
+      "CARTAO POS": "Comprovantes POS conferidos",
+      "TEF CREDITO": "TEF crédito conferido",
+      "TEF DEBITO": "TEF débito conferido",
+      "TEF PIX": "TEF Pix conferido",
+      "PIX OFFLINE": "Comprovante pix conferido",
+      "PAGAMENTO ONLINE IFOOD": "Romaneio Ifood conferido",
+    };
     function isMoneyToken(value) {
       return /^-?[\d.]+,\d{2}$/.test(String(value || ""));
     }
@@ -494,33 +501,84 @@
       }
       return records;
     }
+    function classifyHtmlReports(reports) {
+      const out = { fechamento: null, cartoes: null, tele: null, outros: [] };
+      for (const report of reports) {
+        const clean = norm(report.text);
+        const records = parseRelacaoVendas(report.text);
+        const hasFechamento = clean.includes("FECHAMENTO DE CAIXA") || /CAIXA:\s*\d{3,6}[\s\S]{0,180}ABERTURA:/i.test(report.text);
+        const teleCount = records.filter((rec) => rec.tele === "SIM").length;
+        const cardCount = records.reduce((sum, rec) => sum + (rec.pagamentos?.length || 0), 0);
+        const isTeleList = teleCount > 0 && records.length <= Math.max(teleCount + 2, 3);
+        if (hasFechamento && !out.fechamento) out.fechamento = report;
+        else if (isTeleList && !out.tele) out.tele = report;
+        else if (cardCount > 0 && !out.cartoes) out.cartoes = report;
+        else if (teleCount > 0 && !out.tele) out.tele = report;
+        else out.outros.push(report);
+      }
+      return out;
+    }
+    function reportName(report) {
+      return report?.name || "não informado";
+    }
     function summarizeAuxDraft(draft, auxCartoesText = "", auxTeleText = "") {
       const movs = draft.tele?.movimentos || [];
       const enviadas = new Set(movs.filter((m) => m.tipo === "enviada" && m.venda).map((m) => m.venda));
       const recebidas = movs.filter((m) => m.tipo === "recebida");
       const pendentes = movs.filter((m) => m.tipo === "pendente");
-      const cartoes = parseRelacaoVendas(auxCartoesText).filter((rec) => rec.tele !== "DEV" && !enviadas.has(rec.venda));
+      const cartoesAll = parseRelacaoVendas(auxCartoesText).filter((rec) => !enviadas.has(rec.venda));
+      const devolucoesAux = cartoesAll.filter((rec) => rec.tele === "DEV");
+      const cartoes = cartoesAll.filter((rec) => rec.tele !== "DEV");
       const teleRel = parseRelacaoVendas(auxTeleText).filter((rec) => rec.tele === "SIM" && !enviadas.has(rec.venda));
       const teleVendas = new Set(teleRel.map((rec) => rec.venda));
       const recebidasForaRel = recebidas.filter((m) => m.venda && !teleVendas.has(m.venda));
       const cartaoResumo = auxSummary(cartoes);
+      const auxItems = [];
       const checks = [];
       if (auxCartoesText) {
+        for (const rec of cartoes) {
+          for (const pag of rec.pagamentos || []) {
+            auxItems.push({
+              id: `comp-${rec.venda}-${pag.tipo}`.replace(/\W+/g, "-"),
+              grupo: "Comprovantes",
+              pergunta: auxQuestionByLabel[pag.tipo] || "Comprovantes conferidos",
+              label: `${auxLabelNames[pag.tipo] || pag.tipo} - venda ${rec.venda}`,
+              detalhe: `${moneyText(pag.valor)}${pag.bandeira ? " | " + pag.bandeira : ""}`,
+              checked: true,
+            });
+          }
+        }
+        for (const rec of devolucoesAux) {
+          for (const pag of rec.pagamentos || []) {
+            auxItems.push({
+              id: `dev-${rec.venda}-${pag.tipo}`.replace(/\W+/g, "-"),
+              grupo: "Devoluções",
+              pergunta: "Devoluções conferidas",
+              label: `Devolução - venda ${rec.venda}`,
+              detalhe: `${auxLabelNames[pag.tipo] || pag.tipo}: ${moneyText(pag.valor)}${pag.bandeira ? " | " + pag.bandeira : ""}`,
+              checked: true,
+            });
+          }
+        }
         checks.push({
           nome: "Relação de cartões",
           detalhe: auxCardLabels
             .map((label) => `${auxLabelNames[label]}: ${cartaoResumo[label].qtd} romaneio(s), ${moneyText(cartaoResumo[label].valor)}`)
+            .concat(devolucoesAux.length ? [`Devoluções: ${devolucoesAux.length} comprovante(s)`] : [])
             .join("<br>"),
         });
-        const pos = cartaoResumo["CARTAO POS"], deb = cartaoResumo["TEF DEBITO"], cred = cartaoResumo["TEF CREDITO"], pix = cartaoResumo["TEF PIX"], pixOff = cartaoResumo["PIX OFFLINE"], ifood = cartaoResumo["PAGAMENTO ONLINE IFOOD"];
-        if (pos.qtd) addQuestion(draft.perguntas, "Comprovantes POS conferidos", `Relação cartões: ${pos.qtd} romaneio(s), ${moneyText(pos.valor)}.`);
-        if (deb.qtd) addQuestion(draft.perguntas, "TEF débito conferido", `Relação cartões: ${deb.qtd} romaneio(s), ${moneyText(deb.valor)}.`);
-        if (cred.qtd) addQuestion(draft.perguntas, "TEF crédito conferido", `Relação cartões: ${cred.qtd} romaneio(s), ${moneyText(cred.valor)}.`);
-        if (pix.qtd) addQuestion(draft.perguntas, "TEF Pix conferido", `Relação cartões: ${pix.qtd} romaneio(s), ${moneyText(pix.valor)}.`);
-        if (pixOff.qtd) addQuestion(draft.perguntas, "Comprovante pix conferido", `Relação cartões: ${pixOff.qtd} romaneio(s), ${moneyText(pixOff.valor)}.`);
-        if (ifood.qtd) addQuestion(draft.perguntas, "Romaneio Ifood conferido", `Relação cartões: ${ifood.qtd} romaneio(s), ${moneyText(ifood.valor)}.`);
       }
       if (auxTeleText) {
+        for (const rec of teleRel) {
+          auxItems.push({
+            id: `tele-${rec.venda}`.replace(/\W+/g, "-"),
+            grupo: "Romaneios tele",
+            pergunta: "Todos os romaneios batem com o relatório",
+            label: `Romaneio tele - venda ${rec.venda}`,
+            detalhe: `${rec.cond}${rec.totalLiquido ? " | " + moneyText(rec.totalLiquido) : ""}`,
+            checked: true,
+          });
+        }
         const faltas = [
           ...recebidasForaRel.map((m) => `recebida ${m.venda} do caixa ${m.caixa}`),
           ...pendentes.map((m) => `pendente ${m.venda || ""} sem caixa destino`.trim()),
@@ -538,8 +596,9 @@
         }
       }
       draft._preview.auxChecks = checks;
+      draft._preview.auxItems = auxItems;
       draft._preview.auxCartoes = cartaoResumo;
-      draft._preview.auxTele = { total: teleRel.length, recebidasForaRel, pendentes, enviadas: enviadas.size };
+      draft._preview.auxTele = { total: teleRel.length, recebidasForaRel, pendentes, enviadas: enviadas.size, devolucoes: devolucoesAux.length };
       if (checks.length) {
         draft.observacao_erro = [draft.observacao_erro, "Relatórios auxiliares lidos na pré-importação."].filter(Boolean).join("\n");
       }
@@ -667,22 +726,56 @@
       $("#tele").innerHTML = teleRows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join("");
       $("#checks").innerHTML = (p.auxChecks || []).map((item) => `<tr><td>${item.nome}</td><td>${item.detalhe}</td></tr>`).join("")
         || '<tr><td colspan="2">Nenhum relatório auxiliar informado.</td></tr>';
+      const items = p.auxItems || [];
+      if (items.length) {
+        $("#checks").innerHTML += `<tr><td>Marcação individual</td><td><div class="check-list">${items.map((item) => `
+          <label class="check-item">
+            <input type="checkbox" data-aux-check="${item.id}" ${item.checked ? "checked" : ""}>
+            <span><b>${item.grupo}: ${item.label}</b>${item.detalhe}</span>
+          </label>`).join("")}</div></td></tr>`;
+      }
+    }
+    function appendObs(perguntas, pergunta, obsText) {
+      if (!perguntas[pergunta]) perguntas[pergunta] = { status: "", tipo: "Importado do HTML", obs: obsText };
+      else perguntas[pergunta].obs = [perguntas[pergunta].obs, obsText].filter(Boolean).join(" | ");
+    }
+    function aplicarPendenciasManuais(clean, preview) {
+      const items = preview?.auxItems || [];
+      const faltantes = items.filter((item) => !document.querySelector(`[data-aux-check="${item.id}"]`)?.checked);
+      if (!faltantes.length) return clean;
+      clean.perguntas = { ...(clean.perguntas || {}) };
+      for (const item of faltantes) {
+        appendObs(clean.perguntas, item.pergunta, `Falta em mãos: ${item.label} (${item.detalhe}).`);
+      }
+      clean.observacao_erro = [
+        clean.observacao_erro,
+        `Pendências marcadas na pré-importação: ${faltantes.map((item) => item.label).join("; ")}.`,
+      ].filter(Boolean).join("\n");
+      return clean;
     }
     $("#lerHtml").onclick = async () => {
-      const file = $("#htmlFile").files[0];
-      if (!file) {
-        alert("Selecione um arquivo HTML primeiro.");
+      const files = Array.from($("#htmlFiles").files || []);
+      if (!files.length) {
+        alert("Selecione os relatórios HTML primeiro.");
         return;
       }
       $("#lerHtml").disabled = true;
       $("#status").className = "status warn";
       $("#status").textContent = "Lendo HTML...";
       try {
-        const text = await readHtml(file);
-        const cartoesText = $("#cartoesFile").files[0] ? await readHtml($("#cartoesFile").files[0]) : "";
-        const teleText = $("#teleFile").files[0] ? await readHtml($("#teleFile").files[0]) : "";
+        const reports = [];
+        for (const file of files) reports.push({ name: file.name, text: await readHtml(file) });
+        const classified = classifyHtmlReports(reports);
+        if (!classified.fechamento) throw new Error("Não encontrei o relatório de fechamento entre os arquivos selecionados.");
+        const text = classified.fechamento.text;
+        const cartoesText = classified.cartoes?.text || "";
+        const teleText = classified.tele?.text || "";
         $("#rawText").value = text;
         draft = buildDraft(text, cartoesText, teleText);
+        draft._preview.auxChecks = [
+          { nome: "Arquivos identificados", detalhe: `Fechamento: ${reportName(classified.fechamento)}<br>Cartões: ${reportName(classified.cartoes)}<br>Tele-entrega: ${reportName(classified.tele)}` },
+          ...(draft._preview.auxChecks || []),
+        ];
         renderPreview(draft);
         $("#status").className = "status ok";
         $("#status").textContent = "Prévia pronta";
@@ -697,14 +790,13 @@
     $("#abrirConferencia").onclick = () => {
       if (!draft) return;
       const clean = { ...draft };
+      aplicarPendenciasManuais(clean, draft._preview);
       delete clean._preview;
       localStorage.setItem("conferencia_import_draft", JSON.stringify(clean));
       location.href = "/";
     };
     $("#usarExemplo").onclick = () => {
-      $("#htmlFile").value = "";
-      $("#cartoesFile").value = "";
-      $("#teleFile").value = "";
+      $("#htmlFiles").value = "";
       $("#responsavel").value = "";
       $("#preview").style.display = "none";
       $("#rawText").value = "";

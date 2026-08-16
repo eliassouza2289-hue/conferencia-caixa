@@ -14,7 +14,7 @@
     main{max-width:1180px;margin:0 auto;padding:14px;display:grid;gap:14px}
     .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;box-shadow:var(--shadow)}
     .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.top{display:flex;justify-content:space-between;gap:10px;align-items:center}
-    .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
     label{display:grid;gap:5px;font-size:13px;font-weight:700}input,textarea{border:1px solid #bac7c1;border-radius:6px;padding:10px;background:#fff;font:inherit;width:100%;outline:none}textarea{min-height:130px}
     button,a.button{border:1px solid var(--brand);background:var(--brand);color:#fff;border-radius:6px;padding:9px 12px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
     button.secondary,a.button.secondary{background:#fff;color:var(--brand2)}button:disabled{opacity:.55;cursor:wait}
@@ -22,7 +22,7 @@
     .status{border-radius:999px;padding:4px 8px;font-size:12px;font-weight:800}.ok{background:#e7f6ee;color:var(--ok)}.warn{background:#fff3d9;color:var(--warn)}.bad{background:#fff0ee;color:var(--bad)}
     table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border-bottom:1px solid var(--line);text-align:left;padding:8px;font-size:13px;vertical-align:top}th{background:#f5f8f7}
     #preview{display:none}.notice{border-left:4px solid var(--brand);background:#eff8f5;border-radius:6px;padding:10px;color:var(--muted);font-size:13px;margin-top:10px}
-    @media(max-width:860px){header{align-items:flex-start;flex-direction:column}.grid,.grid2{grid-template-columns:1fr}button,a.button{width:100%}}
+    @media(max-width:860px){header{align-items:flex-start;flex-direction:column}.grid,.grid2,.grid3{grid-template-columns:1fr}button,a.button{width:100%}}
   </style>
 </head>
 <body>
@@ -39,12 +39,14 @@
       <div class="top">
         <div>
           <h2>Selecionar relatório</h2>
-          <p class="muted">Use o HTML de fechamento de caixa. Nada é salvo automaticamente.</p>
+          <p class="muted">Use o HTML de fechamento e, se quiser, os relatórios auxiliares de cartões e tele-entrega.</p>
         </div>
         <span class="status warn" id="status">Aguardando HTML</span>
       </div>
-      <div class="grid2" style="margin-top:12px">
-        <label>Arquivo HTML<input id="htmlFile" type="file" accept="text/html,.html,.htm"></label>
+      <div class="grid3" style="margin-top:12px">
+        <label>Fechamento HTML<input id="htmlFile" type="file" accept="text/html,.html,.htm"></label>
+        <label>Relação cartões HTML<input id="cartoesFile" type="file" accept="text/html,.html,.htm"></label>
+        <label>Relação tele HTML<input id="teleFile" type="file" accept="text/html,.html,.htm"></label>
         <label>Responsável pela conferência<input id="responsavel" placeholder="Opcional, pode escolher depois"></label>
       </div>
       <div class="row" style="margin-top:12px">
@@ -69,6 +71,10 @@
           <h3>Tele-entrega e devoluções</h3>
           <table><thead><tr><th>Item</th><th>Detalhe</th></tr></thead><tbody id="tele"></tbody></table>
         </div>
+      </div>
+      <div style="margin-top:12px">
+        <h3>Checagens auxiliares</h3>
+        <table><thead><tr><th>Relatório</th><th>Resumo pré-importação</th></tr></thead><tbody id="checks"></tbody></table>
       </div>
       <details style="margin-top:12px">
         <summary class="muted">Ver texto lido do HTML</summary>
@@ -402,6 +408,7 @@
       for (let i = start + 1; i < lines.length; i += 1) {
         if (norm(lines[i]).includes("VENDAS REALIZADAS NESTE CAIXA")) break;
         if (!/^\d{5,}$/.test(lines[i])) continue;
+        const venda = lines[i];
         const cond = lines[i + 1] || "Tele";
         let j = i + 2;
         while (j < lines.length && !/^\d{4}$/.test(lines[j])) j += 1;
@@ -414,9 +421,9 @@
         }
         const valor = lines.slice(valorIndex, valorIndex + 4).find((item) => /^-?[\d.]+,\d{2}$/.test(item)) || "";
         const obs = `${cond}${valor ? " - " + moneyText(valor) : ""}`;
-        if (retorno === caixaAtual && origem !== caixaAtual) out.push({ tipo: "recebida", caixa: origem, qtd: 1, obs });
-        else if (origem === caixaAtual && retorno && retorno !== caixaAtual) out.push({ tipo: "enviada", caixa: retorno, qtd: 1, obs });
-        else if (origem === caixaAtual && !retorno) out.push({ tipo: "pendente", caixa: "", qtd: 1, obs: obs || "sem caixa destino" });
+        if (retorno === caixaAtual && origem !== caixaAtual) out.push({ tipo: "recebida", caixa: origem, qtd: 1, venda, obs });
+        else if (origem === caixaAtual && retorno && retorno !== caixaAtual) out.push({ tipo: "enviada", caixa: retorno, qtd: 1, venda, obs });
+        else if (origem === caixaAtual && !retorno) out.push({ tipo: "pendente", caixa: "", qtd: 1, venda, obs: obs || "sem caixa destino" });
         i = Math.max(i, valorIndex + 5);
       }
       return out;
@@ -430,7 +437,115 @@
         .filter(Boolean);
       return texts.join("\n");
     }
-    function buildDraft(text) {
+    const auxCardLabels = ["CARTAO POS", "TEF CREDITO", "TEF DEBITO", "TEF PIX", "PIX OFFLINE", "PAGAMENTO ONLINE IFOOD"];
+    const auxLabelNames = {
+      "CARTAO POS": "Cartão POS",
+      "TEF CREDITO": "TEF crédito",
+      "TEF DEBITO": "TEF débito",
+      "TEF PIX": "TEF Pix",
+      "PIX OFFLINE": "Pix offline",
+      "PAGAMENTO ONLINE IFOOD": "iFood",
+    };
+    function isMoneyToken(value) {
+      return /^-?[\d.]+,\d{2}$/.test(String(value || ""));
+    }
+    function auxSummary(records, labels = auxCardLabels) {
+      const out = Object.fromEntries(labels.map((label) => [label, { qtd: 0, valor: 0, vendas: [] }]));
+      for (const rec of records) {
+        for (const pag of rec.pagamentos || []) {
+          if (!out[pag.tipo]) continue;
+          out[pag.tipo].qtd += 1;
+          out[pag.tipo].valor += pag.valor;
+          out[pag.tipo].vendas.push(rec.venda);
+        }
+      }
+      return out;
+    }
+    function parseRelacaoVendas(text) {
+      const lines = normLines(text);
+      const starts = [];
+      for (let i = 0; i < lines.length - 5; i += 1) {
+        if (/^\d{5,}$/.test(lines[i]) && /^\d{1,3}$/.test(lines[i + 1]) && /^[A-Z? ]{3,30}$/.test(lines[i + 2])) starts.push(i);
+      }
+      const records = [];
+      for (let s = 0; s < starts.length; s += 1) {
+        const start = starts[s];
+        const end = starts[s + 1] || lines.findIndex((line, idx) => idx > start && /^TOTAL (FORMA|CONDICAO|GERAL)/.test(line));
+        const block = lines.slice(start, end > start ? end : Math.min(lines.length, start + 80));
+        const dataIdx = block.findIndex((item) => /^\d{2}\/\d{2}\/\d{4}$/.test(item));
+        const venda = block[0];
+        const cond = block[2] || "";
+        const tele = block.slice(3, Math.max(3, dataIdx)).find((item) => ["SIM", "DEV"].includes(item)) || "";
+        const totalLiquido = block.slice(Math.max(0, dataIdx), dataIdx + 14).filter(isMoneyToken).slice(-1)[0] || "";
+        const pagamentos = [];
+        for (let i = 0; i < block.length; i += 1) {
+          const tipo = auxCardLabels.find((label) => simpleLabel(block[i]) === simpleLabel(label));
+          if (!tipo) continue;
+          const valorRaw = isMoneyToken(block[i - 1]) ? block[i - 1] : "";
+          pagamentos.push({
+            tipo,
+            valor: money(valorRaw),
+            bandeira: block[i + 1] || "",
+          });
+        }
+        if (pagamentos.length || tele === "SIM") {
+          records.push({ venda, cond, tele, data: block[dataIdx] || "", hora: block[dataIdx + 1] || "", totalLiquido: money(totalLiquido), pagamentos });
+        }
+      }
+      return records;
+    }
+    function summarizeAuxDraft(draft, auxCartoesText = "", auxTeleText = "") {
+      const movs = draft.tele?.movimentos || [];
+      const enviadas = new Set(movs.filter((m) => m.tipo === "enviada" && m.venda).map((m) => m.venda));
+      const recebidas = movs.filter((m) => m.tipo === "recebida");
+      const pendentes = movs.filter((m) => m.tipo === "pendente");
+      const cartoes = parseRelacaoVendas(auxCartoesText).filter((rec) => rec.tele !== "DEV" && !enviadas.has(rec.venda));
+      const teleRel = parseRelacaoVendas(auxTeleText).filter((rec) => rec.tele === "SIM" && !enviadas.has(rec.venda));
+      const teleVendas = new Set(teleRel.map((rec) => rec.venda));
+      const recebidasForaRel = recebidas.filter((m) => m.venda && !teleVendas.has(m.venda));
+      const cartaoResumo = auxSummary(cartoes);
+      const checks = [];
+      if (auxCartoesText) {
+        checks.push({
+          nome: "Relação de cartões",
+          detalhe: auxCardLabels
+            .map((label) => `${auxLabelNames[label]}: ${cartaoResumo[label].qtd} romaneio(s), ${moneyText(cartaoResumo[label].valor)}`)
+            .join("<br>"),
+        });
+        const pos = cartaoResumo["CARTAO POS"], deb = cartaoResumo["TEF DEBITO"], cred = cartaoResumo["TEF CREDITO"], pix = cartaoResumo["TEF PIX"], pixOff = cartaoResumo["PIX OFFLINE"], ifood = cartaoResumo["PAGAMENTO ONLINE IFOOD"];
+        if (pos.qtd) addQuestion(draft.perguntas, "Comprovantes POS conferidos", `Relação cartões: ${pos.qtd} romaneio(s), ${moneyText(pos.valor)}.`);
+        if (deb.qtd) addQuestion(draft.perguntas, "TEF débito conferido", `Relação cartões: ${deb.qtd} romaneio(s), ${moneyText(deb.valor)}.`);
+        if (cred.qtd) addQuestion(draft.perguntas, "TEF crédito conferido", `Relação cartões: ${cred.qtd} romaneio(s), ${moneyText(cred.valor)}.`);
+        if (pix.qtd) addQuestion(draft.perguntas, "TEF Pix conferido", `Relação cartões: ${pix.qtd} romaneio(s), ${moneyText(pix.valor)}.`);
+        if (pixOff.qtd) addQuestion(draft.perguntas, "Comprovante pix conferido", `Relação cartões: ${pixOff.qtd} romaneio(s), ${moneyText(pixOff.valor)}.`);
+        if (ifood.qtd) addQuestion(draft.perguntas, "Romaneio Ifood conferido", `Relação cartões: ${ifood.qtd} romaneio(s), ${moneyText(ifood.valor)}.`);
+      }
+      if (auxTeleText) {
+        const faltas = [
+          ...recebidasForaRel.map((m) => `recebida ${m.venda} do caixa ${m.caixa}`),
+          ...pendentes.map((m) => `pendente ${m.venda || ""} sem caixa destino`.trim()),
+        ];
+        const detalhe = [
+          `Tele no relatório: ${teleRel.length} romaneio(s)`,
+          enviadas.size ? `Excluídas por envio a outro caixa: ${enviadas.size}` : "",
+          recebidas.length ? `Recebidas de outro caixa: ${recebidas.length}` : "",
+          faltas.length ? `Faltando conferir: ${faltas.join("; ")}` : "Sem falta encontrada no cruzamento.",
+        ].filter(Boolean).join("<br>");
+        checks.push({ nome: "Relação de tele-entrega", detalhe });
+        if (faltas.length) {
+          addQuestion(draft.perguntas, "Romaneios de Tele entrega vindo de outro caixa conferidos", `Conferir: ${faltas.join("; ")}.`);
+          addQuestion(draft.perguntas, "Todos os romaneios batem com o relatório", `Pendências do cruzamento: ${faltas.join("; ")}.`);
+        }
+      }
+      draft._preview.auxChecks = checks;
+      draft._preview.auxCartoes = cartaoResumo;
+      draft._preview.auxTele = { total: teleRel.length, recebidasForaRel, pendentes, enviadas: enviadas.size };
+      if (checks.length) {
+        draft.observacao_erro = [draft.observacao_erro, "Relatórios auxiliares lidos na pré-importação."].filter(Boolean).join("\n");
+      }
+      return draft;
+    }
+    function buildDraft(text, auxCartoesText = "", auxTeleText = "") {
       const clean = norm(text);
       const lines = normLines(text);
       const headerLine = text.split(/\r?\n/).find((line) => /Caixa:/i.test(line) && /ABERTURA:/i.test(line)) || "";
@@ -507,7 +622,7 @@
         sangria ? `Sangria/movimento: ${moneyText(sangria)}` : "",
         devolucoes.total || devolucoes.resumoQtd ? `Devoluções: ${devolucoes.resumoQtd} ocorrência(s), ${moneyText(String(devolucoes.total).replace(".", ","))}` : "",
       ].filter(Boolean).join("\n");
-      return {
+      return summarizeAuxDraft({
         data,
         numero_caixa: caixa,
         operador,
@@ -520,7 +635,7 @@
         observacao_erro: resumo,
         ajustes: "",
         _preview: { abertura, dinheiro, cartao, crediario, convenio, reembolso, sangria, teleBase, pixOff, ifood, tefCredito, tefDebito, tefPix, pos, devolucoes, teleMovimentos },
-      };
+      }, auxCartoesText, auxTeleText);
     }
     function renderPreview(d) {
       $("#preview").style.display = "block";
@@ -546,10 +661,12 @@
       $("#formas").innerHTML = formas.map(([nome, qtd, val]) => `<tr><td>${nome}</td><td>${qtd || "-"}</td><td>${typeof val === "number" ? val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : (val ? moneyText(val) : "-")}</td></tr>`).join("");
       const teleRows = [
         ["Teles no fechamento", `${p.teleBase || 0}`],
-        ["Teles recebidas/enviadas", p.teleMovimentos.length ? p.teleMovimentos.map((m) => `${m.tipo} ${m.caixa}: ${m.obs}`).join("<br>") : "Nenhuma movimentação encontrada"],
+        ["Teles recebidas/enviadas", p.teleMovimentos.length ? p.teleMovimentos.map((m) => `${m.tipo} ${m.caixa || "-"}${m.venda ? " venda " + m.venda : ""}: ${m.obs}`).join("<br>") : "Nenhuma movimentação encontrada"],
         ["Devoluções", `${p.devolucoes.resumoQtd || 0} ocorrência(s), ${p.devolucoes.total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`],
       ];
       $("#tele").innerHTML = teleRows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join("");
+      $("#checks").innerHTML = (p.auxChecks || []).map((item) => `<tr><td>${item.nome}</td><td>${item.detalhe}</td></tr>`).join("")
+        || '<tr><td colspan="2">Nenhum relatório auxiliar informado.</td></tr>';
     }
     $("#lerHtml").onclick = async () => {
       const file = $("#htmlFile").files[0];
@@ -562,8 +679,10 @@
       $("#status").textContent = "Lendo HTML...";
       try {
         const text = await readHtml(file);
+        const cartoesText = $("#cartoesFile").files[0] ? await readHtml($("#cartoesFile").files[0]) : "";
+        const teleText = $("#teleFile").files[0] ? await readHtml($("#teleFile").files[0]) : "";
         $("#rawText").value = text;
-        draft = buildDraft(text);
+        draft = buildDraft(text, cartoesText, teleText);
         renderPreview(draft);
         $("#status").className = "status ok";
         $("#status").textContent = "Prévia pronta";
@@ -584,6 +703,8 @@
     };
     $("#usarExemplo").onclick = () => {
       $("#htmlFile").value = "";
+      $("#cartoesFile").value = "";
+      $("#teleFile").value = "";
       $("#responsavel").value = "";
       $("#preview").style.display = "none";
       $("#rawText").value = "";

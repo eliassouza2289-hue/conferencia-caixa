@@ -43,6 +43,23 @@ button{border:1px solid var(--brand);background:var(--brand);color:white;border-
 .record{box-shadow:0 4px 18px rgba(20,38,32,.05)}.record p{line-height:1.4}
 .table button{white-space:nowrap}
 .load-more{width:100%;margin-top:10px}
+.wrap{grid-template-columns:minmax(0,1fr) 380px}
+aside.panel{padding:12px}
+aside .top h2{font-size:19px}
+aside .top .muted{font-size:12px}
+aside .filters{gap:8px;margin-top:10px}
+aside label{font-size:12px}
+aside input,aside select{padding:8px;font-size:13px;min-height:38px}
+aside button{padding:8px 10px;font-size:13px}
+aside .metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+aside .metric{padding:8px;min-height:0}
+aside .metric b{font-size:19px;line-height:1}
+aside .metric span{display:block;font-size:12px;line-height:1.15;margin-top:4px}
+aside .record{padding:9px;margin-top:8px;font-size:13px}
+aside .record-head{align-items:flex-start}
+aside .record-head b{font-size:14px}
+aside .record p{font-size:13px;line-height:1.28}
+aside .status{font-size:11px;padding:4px 7px;max-width:82px;text-align:center}
 .hide-report .form-area{padding:12px}.hide-report #fixedQuestions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.hide-report #fixedQuestions .fixed-group{margin:0}.hide-report #gates{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.hide-report .gate{margin-top:0}.hide-report .gate[data-gate="tele"]{grid-column:1/-1}.hide-report .gate.hidden{display:none}
 @media print{header,.form-area,.filters,.record .row,.no-print{display:none!important}.wrap{display:block;padding:0}aside{display:block}.panel,.record{border:0;box-shadow:none}}
 </style>

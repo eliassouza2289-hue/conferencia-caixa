@@ -22,8 +22,9 @@
     .status{border-radius:999px;padding:4px 8px;font-size:12px;font-weight:800}.ok{background:#e7f6ee;color:var(--ok)}.warn{background:#fff3d9;color:var(--warn)}.bad{background:#fff0ee;color:var(--bad)}
     table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border-bottom:1px solid var(--line);text-align:left;padding:8px;font-size:13px;vertical-align:top}th{background:#f5f8f7}
     .check-list{display:grid;gap:6px}.check-item{display:flex;gap:8px;align-items:flex-start;border:1px solid var(--line);border-radius:6px;padding:7px;background:#fbfcfb}.check-item input{width:auto;margin-top:2px}.check-item b{display:block}.check-item span{color:var(--muted);font-size:12px}
+    .help-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.help-card{border:1px solid var(--line);border-radius:8px;padding:12px;background:#fbfdfc;display:grid;gap:10px}.help-card h3{font-size:15px}.help-card ol{margin:0;padding-left:20px;color:#34443f;font-size:13px;line-height:1.5}.shot-row{display:flex;gap:6px;flex-wrap:wrap}.shot{position:relative;border:1px solid #cbd8d4;border-radius:999px;background:#fff;color:var(--brand2);padding:5px 8px;font-size:12px;font-weight:800;cursor:default;outline:none}.shot-preview{display:none;position:absolute;left:0;top:calc(100% + 8px);z-index:10;width:min(640px,80vw);max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff;padding:8px;box-shadow:0 18px 50px rgba(20,38,32,.18)}.shot:hover .shot-preview,.shot:focus .shot-preview{display:block}.shot-preview img{max-width:100%;height:auto;display:block;border-radius:6px}.help-note{font-size:12px;color:var(--muted)}
     #preview{display:none}.notice{border-left:4px solid var(--brand);background:#eff8f5;border-radius:6px;padding:10px;color:var(--muted);font-size:13px;margin-top:10px}
-    @media(max-width:860px){header{align-items:flex-start;flex-direction:column}.grid,.grid2,.grid3{grid-template-columns:1fr}button,a.button{width:100%}}
+    @media(max-width:860px){header{align-items:flex-start;flex-direction:column}.grid,.grid2,.grid3,.help-grid{grid-template-columns:1fr}button,a.button{width:100%}.shot-preview{position:fixed;left:10px;right:10px;top:80px;width:auto}}
   </style>
 </head>
 <body>
@@ -53,6 +54,61 @@
         <button class="secondary" id="usarExemplo" type="button">Limpar</button>
       </div>
       <div class="notice">Pode selecionar os 3 arquivos de uma vez. O fechamento é obrigatório; cartões e tele são usados para a pré-checagem.</div>
+    </section>
+
+    <section class="panel">
+      <div class="top">
+        <div>
+          <h2>🖨️ Como emitir os relatórios no Trier</h2>
+          <p class="muted">Passe o mouse nos botões de imagem para ver onde marcar cada opção. No celular, toque no botão.</p>
+        </div>
+      </div>
+      <div class="help-grid">
+        <article class="help-card">
+          <h3>1. Fechamento de caixa</h3>
+          <ol>
+            <li>Buscar "fechamento de caixa".</li>
+            <li>Selecionar por número de caixa.</li>
+            <li>Informar o número do caixa.</li>
+            <li>Marcar as opções da tela, exceto "Filtrar Movimento pela Data do Lançamento" e "Desconsiderar frete".</li>
+            <li>Selecionar saída HTML.</li>
+          </ol>
+          <div class="shot-row">
+            <span class="shot" tabindex="0">Busca<span class="shot-preview"><img src="/assets/ajuda-relatorios/fechamento-busca.png" alt="Busca do relatório fechamento de caixa"></span></span>
+            <span class="shot" tabindex="0">Opções<span class="shot-preview"><img src="/assets/ajuda-relatorios/fechamento-opcoes.png" alt="Opções do fechamento de caixa"></span></span>
+            <span class="shot" tabindex="0">HTML<span class="shot-preview"><img src="/assets/ajuda-relatorios/saida-html.png" alt="Saída HTML"></span></span>
+          </div>
+        </article>
+        <article class="help-card">
+          <h3>2. Relação de vendas Tele entrega</h3>
+          <ol>
+            <li>Buscar "relação de vendas".</li>
+            <li>Marcar "Imprimir Formas de Pagamento".</li>
+            <li>Marcar "Vendas Tele-Entrega".</li>
+            <li>Selecionar saída HTML.</li>
+          </ol>
+          <div class="shot-row">
+            <span class="shot" tabindex="0">Busca<span class="shot-preview"><img src="/assets/ajuda-relatorios/relacao-busca.png" alt="Busca da relação de vendas"></span></span>
+            <span class="shot" tabindex="0">Opções<span class="shot-preview"><img src="/assets/ajuda-relatorios/relacao-tele-opcoes.png" alt="Opções da relação de vendas tele-entrega"></span></span>
+            <span class="shot" tabindex="0">HTML<span class="shot-preview"><img src="/assets/ajuda-relatorios/saida-html.png" alt="Saída HTML"></span></span>
+          </div>
+        </article>
+        <article class="help-card">
+          <h3>3. Relação de vendas Tipo Cartão</h3>
+          <ol>
+            <li>Buscar "relação de vendas".</li>
+            <li>Marcar "Imprimir Formas de Pagamento".</li>
+            <li>Filtrar tipo cartão 10, 11, 13, 14, 15 e 17.</li>
+            <li>Selecionar saída HTML.</li>
+          </ol>
+          <div class="shot-row">
+            <span class="shot" tabindex="0">Busca<span class="shot-preview"><img src="/assets/ajuda-relatorios/relacao-busca.png" alt="Busca da relação de vendas"></span></span>
+            <span class="shot" tabindex="0">Tipos<span class="shot-preview"><img src="/assets/ajuda-relatorios/relacao-cartao-tipos.png" alt="Filtro de tipo cartão"></span></span>
+            <span class="shot" tabindex="0">HTML<span class="shot-preview"><img src="/assets/ajuda-relatorios/saida-html.png" alt="Saída HTML"></span></span>
+          </div>
+        </article>
+      </div>
+      <p class="help-note" style="margin-top:10px">Depois de gerar os três arquivos em HTML, selecione todos juntos no campo "Relatórios HTML".</p>
     </section>
 
     <section class="panel" id="preview">

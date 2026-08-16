@@ -151,18 +151,17 @@ const normName=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').
 const erroMsg=e=>String(e?.message||e).replace(/[{}"]/g,'').slice(0,600);
 let options={pessoas:[]}, teleMovs=[], pending=[], lastReport=[], alertTimer=null, sideLimit=10;
 const fixedGroups=[
-  ['1. 🖨️ Impressão de relatórios',[],['Relatório de fechamento de caixa impresso','Relação de vendas (Tele entrega)','Relação de vendas (Forma de pagamento 10, 11, 13, 14, 15 e 17)']],
-  ['2. 💰 Conferência de sangrias, abertura e fechamento',['Valor de abertura conferido','Valor de fechamento conferido','Sangria contada fisicamente']]
+  ['1. 💰 Conferência de sangrias, abertura e fechamento',['Valor de abertura conferido','Valor de fechamento conferido','Sangria contada fisicamente']]
 ];
 const gates=[
-  ['tele','3. 🛵 Conferência de tele-entrega',['Quantidade de romaneios confere','Todos os romaneios batem com o relatório','Romaneios de Tele entrega vindo de outro caixa conferidos','Não ficou romaneio pendente','Não ficou valor pendente com motoboy']],
-  ['cartao_pos','4. 💳 Conferência de cartão POS',['Cartões POS conferidos','Comprovantes POS conferidos']],
-  ['tef','5. 🧾 Conferência de TEF débito, crédito e Pix',['TEF débito conferido','TEF crédito conferido','TEF Pix conferido']],
-  ['pix_off','6. 💠 Conferência de Pix off',['Comprovante pix conferido','Conferido recebimento no banco destino']],
-  ['ifood','7. 🍽️ Conferência de iFood',['Romaneio Ifood conferido','Recebimento Ifood conferido']],
-  ['crediario','8. 💰 Recebimento de crediário',['Recebimento de crediário conferido','Baixas/lançamentos de crediário conferidos','Comprovantes de crediário separados']],
-  ['convenio','9. 🤝 Recebimento de convênio',['Recebimento de convênio conferido','Baixas/lançamentos de convênio conferidos','Comprovantes de convênio separados']],
-  ['devolucoes','10. ↩️ Devoluções',['Devoluções conferidas','Documentos de devolução separados']]
+  ['tele','2. 🛵 Conferência de tele-entrega',['Quantidade de romaneios confere','Todos os romaneios batem com o relatório','Romaneios de Tele entrega vindo de outro caixa conferidos','Não ficou romaneio pendente','Não ficou valor pendente com motoboy']],
+  ['cartao_pos','3. 💳 Conferência de cartão POS',['Cartões POS conferidos','Comprovantes POS conferidos']],
+  ['tef','4. 🧾 Conferência de TEF débito, crédito e Pix',['TEF débito conferido','TEF crédito conferido','TEF Pix conferido']],
+  ['pix_off','5. 💠 Conferência de Pix off',['Comprovante pix conferido','Conferido recebimento no banco destino']],
+  ['ifood','6. 🍽️ Conferência de iFood',['Romaneio Ifood conferido','Recebimento Ifood conferido']],
+  ['crediario','7. 💰 Recebimento de crediário',['Recebimento de crediário conferido','Baixas/lançamentos de crediário conferidos','Comprovantes de crediário separados']],
+  ['convenio','8. 🤝 Recebimento de convênio',['Recebimento de convênio conferido','Baixas/lançamentos de convênio conferidos','Comprovantes de convênio separados']],
+  ['devolucoes','9. ↩️ Devoluções',['Devoluções conferidas','Documentos de devolução separados']]
 ];
 async function api(url,opt){let r=await fetch(url,opt);let t=await r.text();if(!r.ok)throw new Error(t||'Falha no servidor');return t?JSON.parse(t):{}}
 function fill(sel,items,empty){sel.innerHTML='<option value="">'+empty+'</option>'+items.map(x=>'<option>'+esc(x.nome||x)+'</option>').join('')}

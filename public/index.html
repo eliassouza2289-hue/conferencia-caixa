@@ -148,7 +148,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const hoje=()=>new Date().toISOString().slice(0,10);
 const dataBR=d=>d?d.split('-').reverse().join('/'):'';
 const normName=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toUpperCase();
-const erroMsg=e=>String(e?.message||e).replace(/[{}"] /g,'').slice(0,600);
+const erroMsg=e=>String(e?.message||e).replace(/[{}"]/g,'').slice(0,600);
 let options={pessoas:[]}, teleMovs=[], pending=[], lastReport=[], alertTimer=null, sideLimit=10;
 const fixedGroups=[
   ['1. 🖨️ Impressão de relatórios',[],['Relatório de fechamento de caixa impresso','Relação de vendas (Tele entrega)','Relação de vendas (Forma de pagamento 10, 11, 13, 14, 15 e 17)']],

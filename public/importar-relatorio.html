@@ -22,7 +22,7 @@
     .status{border-radius:999px;padding:4px 8px;font-size:12px;font-weight:800}.ok{background:#e7f6ee;color:var(--ok)}.warn{background:#fff3d9;color:var(--warn)}.bad{background:#fff0ee;color:var(--bad)}
     table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border-bottom:1px solid var(--line);text-align:left;padding:8px;font-size:13px;vertical-align:top}th{background:#f5f8f7}
     .check-list{display:grid;gap:6px}.check-item{display:flex;gap:8px;align-items:flex-start;border:1px solid var(--line);border-radius:6px;padding:7px;background:#fbfcfb}.check-item input{width:auto;margin-top:2px}.check-item b{display:block}.check-item span{color:var(--muted);font-size:12px}
-    .help-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.help-card{border:1px solid var(--line);border-radius:8px;padding:12px;background:#fbfdfc;display:grid;gap:10px}.help-card h3{font-size:15px}.help-card ol{margin:0;padding-left:20px;color:#34443f;font-size:13px;line-height:1.5}.shot-row{display:flex;gap:6px;flex-wrap:wrap}.shot{position:relative;border:1px solid #cbd8d4;border-radius:999px;background:#fff;color:var(--brand2);padding:5px 8px;font-size:12px;font-weight:800;cursor:default;outline:none}.shot-preview{display:none;position:absolute;left:0;top:calc(100% + 8px);z-index:10;width:min(640px,80vw);max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff;padding:8px;box-shadow:0 18px 50px rgba(20,38,32,.18)}.shot:hover .shot-preview,.shot:focus .shot-preview{display:block}.shot-preview img{max-width:100%;height:auto;display:block;border-radius:6px}.help-note{font-size:12px;color:var(--muted)}
+    .help-details summary{cursor:pointer;list-style:none}.help-details summary::-webkit-details-marker{display:none}.help-summary{display:flex;justify-content:space-between;gap:10px;align-items:center}.help-summary .toggle{border:1px solid var(--line);border-radius:999px;padding:5px 9px;background:#fff;color:var(--brand2);font-size:12px;font-weight:800}.help-details[open] .toggle::after{content:"Minimizar"}.help-details:not([open]) .toggle::after{content:"Mostrar ajuda"}.help-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.help-card{border:1px solid var(--line);border-radius:8px;padding:12px;background:#fbfdfc;display:grid;gap:10px}.help-card h3{font-size:15px}.help-card ol{margin:0;padding-left:20px;color:#34443f;font-size:13px;line-height:1.5}.shot-row{display:flex;gap:6px;flex-wrap:wrap}.shot{position:relative;border:1px solid #cbd8d4;border-radius:999px;background:#fff;color:var(--brand2);padding:5px 8px;font-size:12px;font-weight:800;cursor:default;outline:none}.shot-preview{display:none;position:absolute;left:0;top:calc(100% + 8px);z-index:10;width:min(640px,80vw);max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff;padding:8px;box-shadow:0 18px 50px rgba(20,38,32,.18)}.shot:hover .shot-preview,.shot:focus .shot-preview{display:block}.shot-preview img{max-width:100%;height:auto;display:block;border-radius:6px}.help-note{font-size:12px;color:var(--muted)}
     #preview{display:none}.notice{border-left:4px solid var(--brand);background:#eff8f5;border-radius:6px;padding:10px;color:var(--muted);font-size:13px;margin-top:10px}
     @media(max-width:860px){header{align-items:flex-start;flex-direction:column}.grid,.grid2,.grid3,.help-grid{grid-template-columns:1fr}button,a.button{width:100%}.shot-preview{position:fixed;left:10px;right:10px;top:80px;width:auto}}
   </style>
@@ -38,31 +38,16 @@
 
   <main>
     <section class="panel">
-      <div class="top">
-        <div>
-          <h2>Selecionar relatório</h2>
-          <p class="muted">Selecione os HTMLs juntos. O sistema identifica fechamento, cartões e tele-entrega automaticamente.</p>
-        </div>
-        <span class="status warn" id="status">Aguardando HTML</span>
-      </div>
-      <div class="grid2" style="margin-top:12px">
-        <label>Relatórios HTML<input id="htmlFiles" type="file" accept="text/html,.html,.htm" multiple></label>
-        <label>Responsável pela conferência<input id="responsavel" placeholder="Opcional, pode escolher depois"></label>
-      </div>
-      <div class="row" style="margin-top:12px">
-        <button id="lerHtml">Ler relatório</button>
-        <button class="secondary" id="usarExemplo" type="button">Limpar</button>
-      </div>
-      <div class="notice">Pode selecionar os 3 arquivos de uma vez. O fechamento é obrigatório; cartões e tele são usados para a pré-checagem.</div>
-    </section>
-
-    <section class="panel">
-      <div class="top">
-        <div>
-          <h2>🖨️ Como emitir os relatórios no Trier</h2>
-          <p class="muted">Passe o mouse nos botões de imagem para ver onde marcar cada opção. No celular, toque no botão.</p>
-        </div>
-      </div>
+      <details class="help-details" open>
+        <summary>
+          <div class="help-summary">
+            <div>
+              <h2>🖨️ Como emitir os relatórios no Trier</h2>
+              <p class="muted">Passe o mouse nos botões de imagem para ver onde marcar cada opção. No celular, toque no botão.</p>
+            </div>
+            <span class="toggle"></span>
+          </div>
+        </summary>
       <div class="help-grid">
         <article class="help-card">
           <h3>1. Fechamento de caixa</h3>
@@ -109,12 +94,32 @@
         </article>
       </div>
       <p class="help-note" style="margin-top:10px">Depois de gerar os três arquivos em HTML, selecione todos juntos no campo "Relatórios HTML".</p>
+      </details>
+    </section>
+
+    <section class="panel">
+      <div class="top">
+        <div>
+          <h2>Selecionar relatório</h2>
+          <p class="muted">Selecione os HTMLs juntos. O sistema identifica fechamento, cartões e tele-entrega automaticamente.</p>
+        </div>
+        <span class="status warn" id="status">Aguardando HTML</span>
+      </div>
+      <div class="grid2" style="margin-top:12px">
+        <label>Relatórios HTML<input id="htmlFiles" type="file" accept="text/html,.html,.htm" multiple></label>
+        <label>Responsável pela conferência<input id="responsavel" placeholder="Opcional, pode escolher depois"></label>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button id="lerHtml">Ler relatório</button>
+        <button class="secondary" id="usarExemplo" type="button">Limpar</button>
+      </div>
+      <div class="notice">Pode selecionar os 3 arquivos de uma vez. O fechamento é obrigatório; cartões e tele são usados para a pré-checagem.</div>
     </section>
 
     <section class="panel" id="preview">
       <div class="top">
         <h2>Prévia encontrada</h2>
-        <button id="abrirConferencia">Abrir conferência preenchida</button>
+        <button id="abrirConferencia">Abrir relatório de conferência</button>
       </div>
       <div class="grid" style="margin-top:12px" id="metrics"></div>
       <div class="grid2" style="margin-top:12px">
@@ -135,6 +140,9 @@
         <summary class="muted">Ver texto lido do HTML</summary>
         <textarea id="rawText" readonly></textarea>
       </details>
+      <div class="row" style="justify-content:flex-end;margin-top:12px">
+        <button id="abrirConferenciaRodape">Abrir relatório de conferência</button>
+      </div>
     </section>
   </main>
 
@@ -609,7 +617,7 @@
             auxItems.push({
               id: `dev-${rec.venda}-${pag.tipo}`.replace(/\W+/g, "-"),
               grupo: "Devoluções",
-              pergunta: "Devoluções conferidas",
+              pergunta: "Comprovantes de devolução conferidos",
               label: `Devolução - venda ${rec.venda}`,
               detalhe: `${auxLabelNames[pag.tipo] || pag.tipo}: ${moneyText(pag.valor)}${pag.bandeira ? " | " + pag.bandeira : ""}`,
               checked: true,
@@ -709,15 +717,16 @@
       addQuestion(perguntas, "Valor de abertura conferido", abertura ? `Abertura no HTML: ${moneyText(abertura)}` : (hasLabel(text, "ABERTURA DE CAIXA") ? "Abertura encontrada no HTML; conferir valor manualmente." : ""));
       addQuestion(perguntas, "Valor de fechamento conferido", dinheiro ? `Vendas dinheiro no HTML: ${moneyText(dinheiro)}` : "");
       addQuestion(perguntas, "Sangria contada fisicamente", sangria ? `Sangria/movimento no HTML: ${moneyText(sangria)}` : "");
-      addQuestion(perguntas, "Cartões POS conferidos", obsValor("POS", pos));
+      addQuestion(perguntas, "Comprovantes POS conferidos", obsValor("POS", pos));
       addQuestion(perguntas, "TEF débito conferido", obsValor("TEF débito", tefDebito));
       addQuestion(perguntas, "TEF crédito conferido", obsValor("TEF crédito", tefCredito));
       addQuestion(perguntas, "TEF Pix conferido", obsValor("TEF Pix", tefPix));
       addQuestion(perguntas, "Comprovante pix conferido", obsValor("Pix offline", pixOff));
       addQuestion(perguntas, "Romaneio Ifood conferido", obsValor("iFood", ifood));
-      addQuestion(perguntas, "Recebimento de crediário conferido", money(crediario) ? `Crediário no HTML: ${moneyText(crediario)}` : (hasLabel(text, "CREDIARIO") ? "Crediário encontrado no HTML; conferir valor manualmente." : ""));
-      addQuestion(perguntas, "Recebimento de convênio conferido", money(convenio) ? `Convênio no HTML: ${moneyText(convenio)}` : (hasLabel(text, "CONVENIO") ? "Convênio encontrado no HTML; conferir valor manualmente." : ""));
-      addQuestion(perguntas, "Devoluções conferidas", devolucoes.total || devolucoes.resumoQtd ? `Devoluções no HTML: ${devolucoes.resumoQtd} ocorrência(s), ${moneyText(String(devolucoes.total).replace(".", ","))}` : "");
+      addQuestion(perguntas, "Venda ifood Conferida", obsValor("iFood", ifood));
+      addQuestion(perguntas, "Comprovantes de recebimento de crediário conferidos", money(crediario) ? `Crediário no HTML: ${moneyText(crediario)}` : (hasLabel(text, "CREDIARIO") ? "Crediário encontrado no HTML; conferir valor manualmente." : ""));
+      addQuestion(perguntas, "Comprovantes de recebimento de convênio conferidos", money(convenio) ? `Convênio no HTML: ${moneyText(convenio)}` : (hasLabel(text, "CONVENIO") ? "Convênio encontrado no HTML; conferir valor manualmente." : ""));
+      addQuestion(perguntas, "Comprovantes de devolução conferidos", devolucoes.total || devolucoes.resumoQtd ? `Devoluções no HTML: ${devolucoes.resumoQtd} ocorrência(s), ${moneyText(String(devolucoes.total).replace(".", ","))}` : "");
       const gates = {
         tele: teleBase || teleMovimentos.length ? "sim" : "nao",
         cartao_pos: pos.valor || pos.detectado ? "sim" : "nao",
@@ -843,14 +852,16 @@
         $("#lerHtml").disabled = false;
       }
     };
-    $("#abrirConferencia").onclick = () => {
+    function abrirConferenciaImportada() {
       if (!draft) return;
       const clean = { ...draft };
       aplicarPendenciasManuais(clean, draft._preview);
       delete clean._preview;
       localStorage.setItem("conferencia_import_draft", JSON.stringify(clean));
       location.href = "/";
-    };
+    }
+    $("#abrirConferencia").onclick = abrirConferenciaImportada;
+    $("#abrirConferenciaRodape").onclick = abrirConferenciaImportada;
     $("#usarExemplo").onclick = () => {
       $("#htmlFiles").value = "";
       $("#responsavel").value = "";

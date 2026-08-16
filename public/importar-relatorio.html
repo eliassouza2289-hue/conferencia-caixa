@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Importar relatório PDF - Conferência de Caixa</title>
+  <title>Importar relatório HTML - Conferência de Caixa</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <style>
     :root{--bg:#f3f6f7;--panel:#fff;--line:#d8e1df;--ink:#111c18;--muted:#60706a;--brand:#16725a;--brand2:#0f4f3e;--bad:#b42318;--warn:#946200;--ok:#147444;--shadow:0 12px 30px rgba(20,38,32,.08)}
@@ -28,7 +28,7 @@
 <body>
   <header>
     <div>
-      <h1>📥 Importar relatório PDF</h1>
+      <h1>📥 Importar relatório HTML</h1>
       <p class="muted">Leia o fechamento de caixa e gere uma conferência pré-preenchida para revisão.</p>
     </div>
     <a class="button secondary" href="/">Voltar ao sistema</a>
@@ -39,16 +39,16 @@
       <div class="top">
         <div>
           <h2>Selecionar relatório</h2>
-          <p class="muted">Use o PDF de fechamento de caixa. Nada é salvo automaticamente.</p>
+          <p class="muted">Use o HTML de fechamento de caixa. Nada é salvo automaticamente.</p>
         </div>
-        <span class="status warn" id="status">Aguardando PDF</span>
+        <span class="status warn" id="status">Aguardando HTML</span>
       </div>
       <div class="grid2" style="margin-top:12px">
-        <label>Arquivo PDF<input id="pdfFile" type="file" accept="application/pdf,.pdf"></label>
+        <label>Arquivo HTML<input id="htmlFile" type="file" accept="text/html,.html,.htm"></label>
         <label>Responsável pela conferência<input id="responsavel" placeholder="Opcional, pode escolher depois"></label>
       </div>
       <div class="row" style="margin-top:12px">
-        <button id="lerPdf">Ler relatório</button>
+        <button id="lerHtml">Ler relatório</button>
         <button class="secondary" id="usarExemplo" type="button">Limpar</button>
       </div>
       <div class="notice">O importador preenche dados e abre as etapas certas, mas deixa a conferência pendente para você confirmar comprovantes, romaneios e observações.</div>
@@ -71,16 +71,13 @@
         </div>
       </div>
       <details style="margin-top:12px">
-        <summary class="muted">Ver texto lido do PDF</summary>
+        <summary class="muted">Ver texto lido do HTML</summary>
         <textarea id="rawText" readonly></textarea>
       </details>
     </section>
   </main>
 
-  <script type="module">
-    import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.min.mjs";
-    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.worker.min.mjs";
-
+  <script>
     const $ = (s) => document.querySelector(s);
     let draft = null;
 
@@ -98,6 +95,9 @@
     }
     function norm(text) {
       return String(text || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\uFFFD/g, "?").toUpperCase();
+    }
+    function simpleLabel(text) {
+      return norm(text).replace(/[:.]/g, "").replace(/\s+/g, " ").trim();
     }
     function valueAfter(text, pattern) {
       const m = text.match(pattern);
@@ -121,6 +121,16 @@
       const line = lines.find((item) => re.test(item));
       const m = line ? line.match(re) : null;
       return m ? m[1] : "";
+    }
+    function valueAfterLabel(lines, label) {
+      const wanted = simpleLabel(label);
+      const idx = lines.findIndex((item) => simpleLabel(item) === wanted);
+      if (idx < 0) return "";
+      for (const line of lines.slice(idx + 1, idx + 7)) {
+        const value = line.match(/^-?[\d.]+,\d{2}$/);
+        if (value) return value[0];
+      }
+      return "";
     }
     function hasLabel(text, label) {
       return new RegExp(labelPattern(label), "i").test(norm(text));
@@ -148,6 +158,15 @@
       const re = new RegExp(`\\b${code}\\s+${labelPattern(label)}\\s+([\\d.]+,\\d{2})\\s+(\\d+)\\b`, "im");
       const m = norm(text).match(re);
       return { qtd: m ? Number(m[2]) : 0, valor: m ? money(m[1]) : 0, detectado: Boolean(m) || hasLabel(text, label) };
+    }
+    function htmlCardLine(lines, code, label) {
+      const wanted = simpleLabel(label);
+      for (let i = 0; i < lines.length - 4; i += 1) {
+        if (lines[i] === String(code) && simpleLabel(lines[i + 1]) === wanted) {
+          return { valor: money(lines[i + 2]), qtd: Number(lines[i + 3]) || 0, detectado: true };
+        }
+      }
+      return { qtd: 0, valor: 0, detectado: hasLabel(lines.join("\n"), label) };
     }
     function moneyTokens(text) {
       return (String(text || "").match(/[\d.]+,\d{2}/g) || []).map((raw) => ({ raw, val: money(raw) }));
@@ -304,11 +323,11 @@
       return out;
     }
     function addQuestion(perguntas, texto, obs) {
-      if (obs) perguntas[texto] = { status: "", tipo: "Importado do PDF", obs };
+      if (obs) perguntas[texto] = { status: "", tipo: "Importado do HTML", obs };
     }
     function obsValor(nome, item) {
       if (!item?.detectado) return "";
-      return item.valor ? `${nome} no PDF: ${item.qtd || "-"} venda(s), ${moneyText(item.valor)}` : `${nome} encontrado no PDF; conferir valor manualmente.`;
+      return item.valor ? `${nome} no HTML: ${item.qtd || "-"} venda(s), ${moneyText(item.valor)}` : `${nome} encontrado no HTML; conferir valor manualmente.`;
     }
     function extractTeleMovimentos(text, caixaAtual) {
       const lines = text.split(/\r?\n/);
@@ -361,10 +380,10 @@
         const origensComCaixaAtual = origemLine ? origemLine[1].trim().split(/\s+/) : [];
         return origensComCaixaAtual.slice(0, retornos.length).map((origem, i) => {
           if (retornos[i] === caixaAtual && origem !== caixaAtual) {
-            return { tipo: "recebida", caixa: origem, qtd: 1, obs: `${formas[i] || "Tele"} encontrada no PDF; conferir romaneio.` };
+            return { tipo: "recebida", caixa: origem, qtd: 1, obs: `${formas[i] || "Tele"} encontrada no HTML; conferir romaneio.` };
           }
           if (origem === caixaAtual && retornos[i] !== caixaAtual) {
-            return { tipo: "enviada", caixa: retornos[i], qtd: 1, obs: `${formas[i] || "Tele"} encontrada no PDF; conferir romaneio.` };
+            return { tipo: "enviada", caixa: retornos[i], qtd: 1, obs: `${formas[i] || "Tele"} encontrada no HTML; conferir romaneio.` };
           }
           return null;
         }).filter(Boolean);
@@ -373,30 +392,43 @@
         tipo: "recebida",
         caixa: origem,
         qtd: 1,
-        obs: `${formas[i] || "Tele"} encontrada no PDF; conferir romaneio.`,
+        obs: `${formas[i] || "Tele"} encontrada no HTML; conferir romaneio.`,
       }));
     }
-    async function readPdf(file) {
-      const data = new Uint8Array(await file.arrayBuffer());
-      const pdf = await pdfjsLib.getDocument({ data }).promise;
-      const pages = [];
-      for (let i = 1; i <= pdf.numPages; i += 1) {
-        const page = await pdf.getPage(i);
-        const content = await page.getTextContent();
-        const rows = new Map();
-        for (const item of content.items) {
-          const y = Math.round(item.transform[5]);
-          const x = item.transform[4];
-          if (!rows.has(y)) rows.set(y, []);
-          rows.get(y).push({ x, text: item.str });
+    function extractHtmlTeleMovimentos(lines, caixaAtual) {
+      const start = lines.findIndex((line) => simpleLabel(line) === simpleLabel("Vendas Tele-Entr.Final.Outro Caixa"));
+      if (start < 0) return [];
+      const out = [];
+      for (let i = start + 1; i < lines.length; i += 1) {
+        if (norm(lines[i]).includes("VENDAS REALIZADAS NESTE CAIXA")) break;
+        if (!/^\d{5,}$/.test(lines[i])) continue;
+        const cond = lines[i + 1] || "Tele";
+        let j = i + 2;
+        while (j < lines.length && !/^\d{4}$/.test(lines[j])) j += 1;
+        const origem = lines[j] || "";
+        let retorno = "";
+        let valorIndex = j + 1;
+        if (/^\d{4}$/.test(lines[j + 1] || "")) {
+          retorno = lines[j + 1];
+          valorIndex = j + 2;
         }
-        const lines = [...rows.entries()]
-          .sort((a, b) => b[0] - a[0])
-          .map(([, items]) => items.sort((a, b) => a.x - b.x).map((item) => item.text).join(" ").replace(/\s+/g, " ").trim())
-          .filter(Boolean);
-        pages.push(lines.join("\n"));
+        const valor = lines.slice(valorIndex, valorIndex + 4).find((item) => /^-?[\d.]+,\d{2}$/.test(item)) || "";
+        const obs = `${cond}${valor ? " - " + moneyText(valor) : ""}`;
+        if (retorno === caixaAtual && origem !== caixaAtual) out.push({ tipo: "recebida", caixa: origem, qtd: 1, obs });
+        else if (origem === caixaAtual && retorno && retorno !== caixaAtual) out.push({ tipo: "enviada", caixa: retorno, qtd: 1, obs });
+        else if (origem === caixaAtual && !retorno) out.push({ tipo: "pendente", caixa: "", qtd: 1, obs: obs || "sem caixa destino" });
+        i = Math.max(i, valorIndex + 5);
       }
-      return pages.join("\n");
+      return out;
+    }
+    async function readHtml(file) {
+      const html = await file.text();
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const spans = Array.from(doc.querySelectorAll("span"));
+      const texts = spans
+        .map((el) => el.textContent.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim())
+        .filter(Boolean);
+      return texts.join("\n");
     }
     function buildDraft(text) {
       const clean = norm(text);
@@ -411,11 +443,11 @@
       const operador = header ? header[2].trim().replace(/\s+/g, " ") : operadorFallback;
       const data = brDateToIso(header ? header[4] : fechamentoFallback);
       const browserResumo = browserResumoValores(text);
-      const abertura = valueFromLine(lines, "ABERTURA DE CAIXA");
-      const dinheiro = valueFromLine(lines, "VENDAS DINHEIRO") || browserResumo.dinheiro || "";
-      const cartao = valueFromLine(lines, "VENDAS CARTAO") || valueFromLine(lines, "MOVIMENTO CAIXA CARTAO") || nearValue(lines, "MOVIMENTO CAIXA CARTAO");
-      const crediario = valueFromLine(lines, "VENDAS CREDIARIO") || valueFromLine(lines, "MOVIMENTO CAIXA CREDIARIO") || browserResumo.crediario || "";
-      const convenio = valueFromLine(lines, "VENDAS CONVENIO") || valueFromLine(lines, "MOVIMENTO CAIXA CONVENIO") || browserResumo.convenio || "";
+      const abertura = valueAfterLabel(lines, "ABERTURA DE CAIXA") || valueFromLine(lines, "ABERTURA DE CAIXA");
+      const dinheiro = valueAfterLabel(lines, "VENDAS DINHEIRO") || valueFromLine(lines, "VENDAS DINHEIRO") || browserResumo.dinheiro || "";
+      const cartao = valueAfterLabel(lines, "VENDAS CARTAO") || valueFromLine(lines, "VENDAS CARTAO") || valueFromLine(lines, "MOVIMENTO CAIXA CARTAO") || nearValue(lines, "MOVIMENTO CAIXA CARTAO");
+      const crediario = valueAfterLabel(lines, "VENDAS CREDIARIO") || valueFromLine(lines, "VENDAS CREDIARIO") || valueFromLine(lines, "MOVIMENTO CAIXA CREDIARIO") || browserResumo.crediario || "";
+      const convenio = valueAfterLabel(lines, "VENDAS CONVENIO") || valueFromLine(lines, "VENDAS CONVENIO") || valueFromLine(lines, "MOVIMENTO CAIXA CONVENIO") || browserResumo.convenio || "";
       const reembolso = valueFromLine(lines, "REEMBOLSO") || valueFromLine(lines, "MOVIMENTO CAIXA REEMBOLSO") || nearValue(lines, "REEMBOLSO");
       const sangriaLinha = valueFromLine(lines, "SANGRIA DINHEIRO") || valueFromLine(lines, "MOVIMENTO CAIXA DINHEIRO");
       const sangria = money(sangriaLinha) ? sangriaLinha : (browserResumo.sangria || nearValue(lines, "SANGRIA"));
@@ -423,12 +455,12 @@
       const teleResumo = teleLine ? teleLine.match(/VENDAS:\s*(\d+)\s+([\d.]+,\d{2})/) : null;
       const teleSolta = text.match(/(\d+)\s+0\s+\1\s+[\s\S]{0,700}?Vendas Tele-Entrega/i);
       const cartaoFallback = extractVendasCartaoFallback(text);
-      const pixOff = mergeCard(cardLine(text, 10, "PIX OFFLINE"), cartaoFallback[10]);
-      const ifood = mergeCard(cardLine(text, 11, "PAGAMENTO ONLINE IFOOD"), cartaoFallback[11]);
-      const tefCredito = mergeCard(cardLine(text, 13, "TEF CREDITO"), cartaoFallback[13]);
-      const tefDebito = mergeCard(cardLine(text, 14, "TEF DEBITO"), cartaoFallback[14]);
-      const pos = mergeCard(cardLine(text, 15, "CARTAO POS"), cartaoFallback[15]);
-      const tefPix = mergeCard(cardLine(text, 17, "TEF PIX"), cartaoFallback[17]);
+      const pixOff = mergeCard(mergeCard(htmlCardLine(lines, 10, "PIX OFFLINE"), cardLine(text, 10, "PIX OFFLINE")), cartaoFallback[10]);
+      const ifood = mergeCard(mergeCard(htmlCardLine(lines, 11, "PAGAMENTO ONLINE IFOOD"), cardLine(text, 11, "PAGAMENTO ONLINE IFOOD")), cartaoFallback[11]);
+      const tefCredito = mergeCard(mergeCard(htmlCardLine(lines, 13, "TEF CREDITO"), cardLine(text, 13, "TEF CREDITO")), cartaoFallback[13]);
+      const tefDebito = mergeCard(mergeCard(htmlCardLine(lines, 14, "TEF DEBITO"), cardLine(text, 14, "TEF DEBITO")), cartaoFallback[14]);
+      const pos = mergeCard(mergeCard(htmlCardLine(lines, 15, "CARTAO POS"), cardLine(text, 15, "CARTAO POS")), cartaoFallback[15]);
+      const tefPix = mergeCard(mergeCard(htmlCardLine(lines, 17, "TEF PIX"), cardLine(text, 17, "TEF PIX")), cartaoFallback[17]);
       const devolucoes = {
         dinheiro: money(valueFromLine(lines, "DEVOLUCAO VENDAS DINHEIRO")),
         cartao: money(valueFromLine(lines, "DEVOLUCAO VENDAS CARTAO") || browserResumo.devolucaoCartao),
@@ -437,24 +469,25 @@
         resumoQtd: numberFromLine(lines, "DEVOLUCOES") || browserResumo.devolucaoQtd || 0,
       };
       devolucoes.total = devolucoes.dinheiro + devolucoes.cartao + devolucoes.crediario + devolucoes.convenio;
-      let teleMovimentos = extractTeleMovimentos(text, caixa);
+      let teleMovimentos = extractHtmlTeleMovimentos(lines, caixa);
+      if (!teleMovimentos.length) teleMovimentos = extractTeleMovimentos(text, caixa);
       if (!teleMovimentos.length) teleMovimentos = extractTeleMovimentosSoltos(text, caixa);
       const teleBase = teleResumo ? Number(teleResumo[1]) : (teleSolta ? Number(teleSolta[1]) : (browserResumo.teleBase || 0));
       const recebidas = teleMovimentos.filter((m) => m.tipo === "recebida").length;
       const enviadas = teleMovimentos.filter((m) => m.tipo === "enviada").length;
       const perguntas = {};
-      addQuestion(perguntas, "Valor de abertura conferido", abertura ? `Abertura no PDF: ${moneyText(abertura)}` : (hasLabel(text, "ABERTURA DE CAIXA") ? "Abertura encontrada no PDF; conferir valor manualmente." : ""));
-      addQuestion(perguntas, "Valor de fechamento conferido", dinheiro ? `Vendas dinheiro no PDF: ${moneyText(dinheiro)}` : "");
-      addQuestion(perguntas, "Sangria contada fisicamente", sangria ? `Sangria/movimento no PDF: ${moneyText(sangria)}` : "");
+      addQuestion(perguntas, "Valor de abertura conferido", abertura ? `Abertura no HTML: ${moneyText(abertura)}` : (hasLabel(text, "ABERTURA DE CAIXA") ? "Abertura encontrada no HTML; conferir valor manualmente." : ""));
+      addQuestion(perguntas, "Valor de fechamento conferido", dinheiro ? `Vendas dinheiro no HTML: ${moneyText(dinheiro)}` : "");
+      addQuestion(perguntas, "Sangria contada fisicamente", sangria ? `Sangria/movimento no HTML: ${moneyText(sangria)}` : "");
       addQuestion(perguntas, "Cartões POS conferidos", obsValor("POS", pos));
       addQuestion(perguntas, "TEF débito conferido", obsValor("TEF débito", tefDebito));
       addQuestion(perguntas, "TEF crédito conferido", obsValor("TEF crédito", tefCredito));
       addQuestion(perguntas, "TEF Pix conferido", obsValor("TEF Pix", tefPix));
       addQuestion(perguntas, "Comprovante pix conferido", obsValor("Pix offline", pixOff));
       addQuestion(perguntas, "Romaneio Ifood conferido", obsValor("iFood", ifood));
-      addQuestion(perguntas, "Recebimento de crediário conferido", money(crediario) ? `Crediário no PDF: ${moneyText(crediario)}` : (hasLabel(text, "CREDIARIO") ? "Crediário encontrado no PDF; conferir valor manualmente." : ""));
-      addQuestion(perguntas, "Recebimento de convênio conferido", money(convenio) ? `Convênio no PDF: ${moneyText(convenio)}` : (hasLabel(text, "CONVENIO") ? "Convênio encontrado no PDF; conferir valor manualmente." : ""));
-      addQuestion(perguntas, "Devoluções conferidas", devolucoes.total || devolucoes.resumoQtd ? `Devoluções no PDF: ${devolucoes.resumoQtd} ocorrência(s), ${moneyText(String(devolucoes.total).replace(".", ","))}` : "");
+      addQuestion(perguntas, "Recebimento de crediário conferido", money(crediario) ? `Crediário no HTML: ${moneyText(crediario)}` : (hasLabel(text, "CREDIARIO") ? "Crediário encontrado no HTML; conferir valor manualmente." : ""));
+      addQuestion(perguntas, "Recebimento de convênio conferido", money(convenio) ? `Convênio no HTML: ${moneyText(convenio)}` : (hasLabel(text, "CONVENIO") ? "Convênio encontrado no HTML; conferir valor manualmente." : ""));
+      addQuestion(perguntas, "Devoluções conferidas", devolucoes.total || devolucoes.resumoQtd ? `Devoluções no HTML: ${devolucoes.resumoQtd} ocorrência(s), ${moneyText(String(devolucoes.total).replace(".", ","))}` : "");
       const gates = {
         tele: teleBase || teleMovimentos.length ? "sim" : "nao",
         cartao_pos: pos.valor || pos.detectado ? "sim" : "nao",
@@ -466,7 +499,7 @@
         devolucoes: devolucoes.total || devolucoes.resumoQtd ? "sim" : "nao",
       };
       const resumo = [
-        `Importado de PDF. Revise antes de salvar.`,
+        `Importado de HTML. Revise antes de salvar.`,
         abertura ? `Abertura: ${moneyText(abertura)}` : "",
         dinheiro ? `Dinheiro: ${moneyText(dinheiro)}` : "",
         cartao ? `Cartão total: ${moneyText(cartao)}` : "",
@@ -518,17 +551,17 @@
       ];
       $("#tele").innerHTML = teleRows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join("");
     }
-    $("#lerPdf").onclick = async () => {
-      const file = $("#pdfFile").files[0];
+    $("#lerHtml").onclick = async () => {
+      const file = $("#htmlFile").files[0];
       if (!file) {
-        alert("Selecione um PDF primeiro.");
+        alert("Selecione um arquivo HTML primeiro.");
         return;
       }
-      $("#lerPdf").disabled = true;
+      $("#lerHtml").disabled = true;
       $("#status").className = "status warn";
-      $("#status").textContent = "Lendo PDF...";
+      $("#status").textContent = "Lendo HTML...";
       try {
-        const text = await readPdf(file);
+        const text = await readHtml(file);
         $("#rawText").value = text;
         draft = buildDraft(text);
         renderPreview(draft);
@@ -537,26 +570,26 @@
       } catch (err) {
         $("#status").className = "status bad";
         $("#status").textContent = "Erro na leitura";
-        alert("Não consegui ler esse PDF: " + (err.message || err));
+        alert("Não consegui ler esse HTML: " + (err.message || err));
       } finally {
-        $("#lerPdf").disabled = false;
+        $("#lerHtml").disabled = false;
       }
     };
     $("#abrirConferencia").onclick = () => {
       if (!draft) return;
       const clean = { ...draft };
       delete clean._preview;
-      localStorage.setItem("conferencia_pdf_draft", JSON.stringify(clean));
+      localStorage.setItem("conferencia_import_draft", JSON.stringify(clean));
       location.href = "/";
     };
     $("#usarExemplo").onclick = () => {
-      $("#pdfFile").value = "";
+      $("#htmlFile").value = "";
       $("#responsavel").value = "";
       $("#preview").style.display = "none";
       $("#rawText").value = "";
       draft = null;
       $("#status").className = "status warn";
-      $("#status").textContent = "Aguardando PDF";
+      $("#status").textContent = "Aguardando HTML";
     };
   </script>
 </body>

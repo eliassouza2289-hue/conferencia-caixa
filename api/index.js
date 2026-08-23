@@ -122,9 +122,11 @@ async function avisos(caixa) {
 
 async function listConferencias(query) {
   const params = { select: "*", order: "data.desc,criado_em.desc" };
+  const dataExata = query.get("data");
   const dataInicio = query.get("data_inicio");
   const dataFim = query.get("data_fim");
-  if (dataInicio && dataFim) params.and = `(data.gte.${dataInicio},data.lte.${dataFim})`;
+  if (dataExata) params.data = `eq.${dataExata}`;
+  else if (dataInicio && dataFim) params.and = `(data.gte.${dataInicio},data.lte.${dataFim})`;
   else if (dataInicio) params.data = `gte.${dataInicio}`;
   else if (dataFim) params.data = `lte.${dataFim}`;
   if (query.get("numero_caixa")) params.numero_caixa = `ilike.*${query.get("numero_caixa")}*`;

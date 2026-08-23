@@ -587,6 +587,11 @@
       ].filter(Boolean).join(" | "));
       return partes.join("; ");
     }
+    function auxTipoPagamento(line) {
+      const clean = simpleLabel(line);
+      if (clean === simpleLabel("PAGAMENTO ONLINE") || clean === simpleLabel("PAGAMENTO ONLINE IFOOD")) return "PAGAMENTO ONLINE IFOOD";
+      return auxCardLabels.find((label) => clean === simpleLabel(label)) || "";
+    }
     function parseRelacaoVendas(text) {
       const lines = normLines(text);
       const starts = [];
@@ -605,7 +610,7 @@
         const totalLiquido = block.slice(Math.max(0, dataIdx), dataIdx + 14).filter(isMoneyToken).slice(-1)[0] || "";
         const pagamentos = [];
         for (let i = 0; i < block.length; i += 1) {
-          const tipo = auxCardLabels.find((label) => simpleLabel(block[i]) === simpleLabel(label));
+          const tipo = auxTipoPagamento(block[i]);
           if (!tipo) continue;
           const valorRaw = isMoneyToken(block[i - 1]) ? block[i - 1] : "";
           pagamentos.push({

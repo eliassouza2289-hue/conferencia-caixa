@@ -260,6 +260,53 @@
       if (primary.valor || !fallback?.valor) return primary;
       return { ...primary, ...fallback, detectado: true };
     }
+    function firstMoneyAfter(lines, idx, limit = 8) {
+      for (const line of lines.slice(idx + 1, idx + 1 + limit)) {
+        const values = line.match(/[\d.]+,\d{2}/g);
+        if (values?.length) return values[0];
+      }
+      return "";
+    }
+    function extractTeleResumoFechamento(lines) {
+      const start = lines.findIndex((line) => simpleLabel(line) === simpleLabel("Vendas Tele-Entrega"));
+      if (start < 0) return { qtd: 0, valor: "" };
+      const sectionLines = lines.slice(start, start + 45);
+      const section = sectionLines.join(" ");
+      let m = section.match(/\bVENDAS\s*:?\s*(\d{1,4})\s+([\d.]+,\d{2})/i);
+      if (!m) {
+        const vendaIdx = sectionLines.findIndex((line) => /^VENDAS\s*:?\s*$/i.test(line) || /^VENDAS\s*:\s*\d+/i.test(line));
+        if (vendaIdx >= 0) {
+          const chunk = sectionLines.slice(vendaIdx, vendaIdx + 8).join(" ");
+          m = chunk.match(/\bVENDAS\s*:?\s*(\d{1,4})?\s*([\d.]+,\d{2})?/i);
+          if (!m?.[1]) {
+            const qtd = sectionLines.slice(vendaIdx + 1, vendaIdx + 8).find((line) => /^\d{1,4}$/.test(line));
+            const valor = firstMoneyAfter(sectionLines, vendaIdx, 8);
+            return { qtd: Number(qtd || 0), valor };
+          }
+        }
+      }
+      return { qtd: Number(m?.[1] || 0), valor: m?.[2] || "" };
+    }
+    function extractRecebimentos(lines) {
+      const start = lines.findIndex((line) => simpleLabel(line) === simpleLabel("Resumo de Contas Recebidas"));
+      if (start < 0) return { crediario: "", convenio: "", detectado: false };
+      const endRel = lines.slice(start + 1).findIndex((line) => simpleLabel(line) === simpleLabel("Quantidade Vendida") || simpleLabel(line) === simpleLabel("Movimento de Caixa Detalhado"));
+      const section = lines.slice(start, endRel >= 0 ? start + 1 + endRel : start + 80);
+      const totals = section
+        .map((line, idx) => simpleLabel(line) === simpleLabel("Total Liquido Recebimento") ? firstMoneyAfter(section, idx, 4) : "")
+        .filter(Boolean);
+      const valueNear = (label) => {
+        const values = section
+          .map((line, idx) => simpleLabel(line).includes(simpleLabel(label)) ? firstMoneyAfter(section, idx, 6) : "")
+          .filter(Boolean);
+        return values.find((value) => money(value) > 0) || values[0] || "";
+      };
+      return {
+        crediario: totals[0] || valueNear("Contas Recebidas Crediario") || "",
+        convenio: totals[1] || valueNear("Contas Recebidas Convenio") || "",
+        detectado: true,
+      };
+    }
     function repeatedPairs(tokens) {
       const pairs = [];
       for (let i = 0; i < tokens.length - 1; i += 1) {
@@ -606,6 +653,7 @@
               id: `comp-${rec.venda}-${pag.tipo}`.replace(/\W+/g, "-"),
               grupo: "Comprovantes",
               pergunta: auxQuestionByLabel[pag.tipo] || "Comprovantes conferidos",
+              tipoErro: "Comprovante faltando",
               label: `${auxLabelNames[pag.tipo] || pag.tipo} - venda ${rec.venda}`,
               detalhe: `${moneyText(pag.valor)}${pag.bandeira ? " | " + pag.bandeira : ""}`,
               checked: true,
@@ -618,6 +666,7 @@
               id: `dev-${rec.venda}-${pag.tipo}`.replace(/\W+/g, "-"),
               grupo: "Devoluções",
               pergunta: "Comprovantes de devolução conferidos",
+              tipoErro: "Comprovante faltando",
               label: `Devolução - venda ${rec.venda}`,
               detalhe: `${auxLabelNames[pag.tipo] || pag.tipo}: ${moneyText(pag.valor)}${pag.bandeira ? " | " + pag.bandeira : ""}`,
               checked: true,
@@ -637,7 +686,8 @@
           auxItems.push({
             id: `tele-${rec.venda}`.replace(/\W+/g, "-"),
             grupo: "Romaneios tele",
-            pergunta: "Todos os romaneios batem com o relatório",
+            pergunta: "Quantidade de romaneios confere",
+            tipoErro: "Romaneio pendente",
             label: `Romaneio tele - venda ${rec.venda}`,
             detalhe: `${rec.cond}${rec.totalLiquido ? " | " + moneyText(rec.totalLiquido) : ""}`,
             checked: true,
@@ -656,7 +706,7 @@
         checks.push({ nome: "Relação de tele-entrega", detalhe });
         if (faltas.length) {
           addQuestion(draft.perguntas, "Romaneios de Tele entrega vindo de outro caixa conferidos", `Conferir: ${faltas.join("; ")}.`);
-          addQuestion(draft.perguntas, "Todos os romaneios batem com o relatório", `Pendências do cruzamento: ${faltas.join("; ")}.`);
+          addQuestion(draft.perguntas, "Quantidade de romaneios confere", `Pendências do cruzamento: ${faltas.join("; ")}.`);
         }
       }
       draft._preview.auxChecks = checks;
@@ -681,17 +731,16 @@
       const operador = header ? header[2].trim().replace(/\s+/g, " ") : operadorFallback;
       const data = brDateToIso(header ? header[4] : fechamentoFallback);
       const browserResumo = browserResumoValores(text);
+      const teleResumoCaixa = extractTeleResumoFechamento(lines);
+      const recebimentos = extractRecebimentos(lines);
       const abertura = valueAfterLabel(lines, "ABERTURA DE CAIXA") || valueFromLine(lines, "ABERTURA DE CAIXA");
       const dinheiro = valueAfterLabel(lines, "VENDAS DINHEIRO") || valueFromLine(lines, "VENDAS DINHEIRO") || browserResumo.dinheiro || "";
       const cartao = valueAfterLabel(lines, "VENDAS CARTAO") || valueFromLine(lines, "VENDAS CARTAO") || valueFromLine(lines, "MOVIMENTO CAIXA CARTAO") || nearValue(lines, "MOVIMENTO CAIXA CARTAO");
-      const crediario = valueAfterLabel(lines, "VENDAS CREDIARIO") || valueFromLine(lines, "VENDAS CREDIARIO") || valueFromLine(lines, "MOVIMENTO CAIXA CREDIARIO") || browserResumo.crediario || "";
-      const convenio = valueAfterLabel(lines, "VENDAS CONVENIO") || valueFromLine(lines, "VENDAS CONVENIO") || valueFromLine(lines, "MOVIMENTO CAIXA CONVENIO") || browserResumo.convenio || "";
+      const crediario = recebimentos.crediario || "";
+      const convenio = recebimentos.convenio || "";
       const reembolso = valueFromLine(lines, "REEMBOLSO") || valueFromLine(lines, "MOVIMENTO CAIXA REEMBOLSO") || nearValue(lines, "REEMBOLSO");
       const sangriaLinha = valueFromLine(lines, "SANGRIA DINHEIRO") || valueFromLine(lines, "MOVIMENTO CAIXA DINHEIRO");
       const sangria = money(sangriaLinha) ? sangriaLinha : (browserResumo.sangria || nearValue(lines, "SANGRIA"));
-      const teleLine = lines.find((line) => /VENDAS:\s*\d+\s+[\d.]+,\d{2}/.test(line));
-      const teleResumo = teleLine ? teleLine.match(/VENDAS:\s*(\d+)\s+([\d.]+,\d{2})/) : null;
-      const teleSolta = text.match(/(\d+)\s+0\s+\1\s+[\s\S]{0,700}?Vendas Tele-Entrega/i);
       const cartaoFallback = extractVendasCartaoFallback(text);
       const pixOff = mergeCard(mergeCard(htmlCardLine(lines, 10, "PIX OFFLINE"), cardLine(text, 10, "PIX OFFLINE")), cartaoFallback[10]);
       const ifood = mergeCard(mergeCard(htmlCardLine(lines, 11, "PAGAMENTO ONLINE IFOOD"), cardLine(text, 11, "PAGAMENTO ONLINE IFOOD")), cartaoFallback[11]);
@@ -710,7 +759,7 @@
       let teleMovimentos = extractHtmlTeleMovimentos(lines, caixa);
       if (!teleMovimentos.length) teleMovimentos = extractTeleMovimentos(text, caixa);
       if (!teleMovimentos.length) teleMovimentos = extractTeleMovimentosSoltos(text, caixa);
-      const teleBase = teleResumo ? Number(teleResumo[1]) : (teleSolta ? Number(teleSolta[1]) : (browserResumo.teleBase || 0));
+      const teleBase = teleResumoCaixa.qtd || 0;
       const recebidas = teleMovimentos.filter((m) => m.tipo === "recebida").length;
       const enviadas = teleMovimentos.filter((m) => m.tipo === "enviada").length;
       const perguntas = {};
@@ -724,8 +773,8 @@
       addQuestion(perguntas, "Comprovante pix conferido", obsValor("Pix offline", pixOff));
       addQuestion(perguntas, "Romaneio Ifood conferido", obsValor("iFood", ifood));
       addQuestion(perguntas, "Venda ifood Conferida", obsValor("iFood", ifood));
-      addQuestion(perguntas, "Comprovantes de recebimento de crediário conferidos", money(crediario) ? `Crediário no HTML: ${moneyText(crediario)}` : (hasLabel(text, "CREDIARIO") ? "Crediário encontrado no HTML; conferir valor manualmente." : ""));
-      addQuestion(perguntas, "Comprovantes de recebimento de convênio conferidos", money(convenio) ? `Convênio no HTML: ${moneyText(convenio)}` : (hasLabel(text, "CONVENIO") ? "Convênio encontrado no HTML; conferir valor manualmente." : ""));
+      addQuestion(perguntas, "Comprovantes de recebimento de crediário conferidos", money(crediario) ? `Recebimento de crediário no Resumo de Contas Recebidas: ${moneyText(crediario)}` : "");
+      addQuestion(perguntas, "Comprovantes de recebimento de convênio conferidos", money(convenio) ? `Recebimento de convênio no Resumo de Contas Recebidas: ${moneyText(convenio)}` : "");
       addQuestion(perguntas, "Comprovantes de devolução conferidos", devolucoes.total || devolucoes.resumoQtd ? `Devoluções no HTML: ${devolucoes.resumoQtd} ocorrência(s), ${moneyText(String(devolucoes.total).replace(".", ","))}` : "");
       const gates = {
         tele: teleBase || teleMovimentos.length ? "sim" : "nao",
@@ -733,8 +782,8 @@
         tef: tefCredito.valor || tefDebito.valor || tefPix.valor || tefCredito.detectado || tefDebito.detectado || tefPix.detectado ? "sim" : "nao",
         pix_off: pixOff.valor || pixOff.detectado ? "sim" : "nao",
         ifood: ifood.valor || ifood.detectado ? "sim" : "nao",
-        crediario: money(crediario) || hasLabel(text, "CREDIARIO") ? "sim" : "nao",
-        convenio: money(convenio) || hasLabel(text, "CONVENIO") ? "sim" : "nao",
+        crediario: money(crediario) ? "sim" : "nao",
+        convenio: money(convenio) ? "sim" : "nao",
         devolucoes: devolucoes.total || devolucoes.resumoQtd ? "sim" : "nao",
       };
       const resumo = [
@@ -758,7 +807,7 @@
         tele: { teve: gates.tele, base: teleBase, movimentos: teleMovimentos, total: teleBase + recebidas - enviadas },
         observacao_erro: resumo,
         ajustes: "",
-        _preview: { abertura, dinheiro, cartao, crediario, convenio, reembolso, sangria, teleBase, pixOff, ifood, tefCredito, tefDebito, tefPix, pos, devolucoes, teleMovimentos },
+        _preview: { abertura, dinheiro, cartao, crediario, convenio, recebimentosDetectados: recebimentos.detectado, reembolso, sangria, teleBase, teleValor: teleResumoCaixa.valor, pixOff, ifood, tefCredito, tefDebito, tefPix, pos, devolucoes, teleMovimentos },
       }, auxCartoesText, auxTeleText);
     }
     function renderPreview(d) {
@@ -779,12 +828,12 @@
         ["TEF Pix", p.tefPix.qtd, p.tefPix.valor],
         ["Pix offline", p.pixOff.qtd, p.pixOff.valor],
         ["iFood", p.ifood.qtd, p.ifood.valor],
-        ["Crediário", "", p.crediario],
-        ["Convênio", "", p.convenio],
+        ["Receb. crediário", "", p.crediario],
+        ["Receb. convênio", "", p.convenio],
       ];
       $("#formas").innerHTML = formas.map(([nome, qtd, val]) => `<tr><td>${nome}</td><td>${qtd || "-"}</td><td>${typeof val === "number" ? val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : (val ? moneyText(val) : "-")}</td></tr>`).join("");
       const teleRows = [
-        ["Teles no fechamento", `${p.teleBase || 0}`],
+        ["Teles no fechamento", `${p.teleBase || 0}${p.teleValor ? " | " + moneyText(p.teleValor) : ""}`],
         ["Teles recebidas/enviadas", p.teleMovimentos.length ? p.teleMovimentos.map((m) => `${m.tipo} ${m.caixa || "-"}${m.venda ? " venda " + m.venda : ""}: ${m.obs}`).join("<br>") : "Nenhuma movimentação encontrada"],
         ["Devoluções", `${p.devolucoes.resumoQtd || 0} ocorrência(s), ${p.devolucoes.total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`],
       ];
@@ -800,9 +849,13 @@
           </label>`).join("")}</div></td></tr>`;
       }
     }
-    function appendObs(perguntas, pergunta, obsText) {
-      if (!perguntas[pergunta]) perguntas[pergunta] = { status: "", tipo: "Importado do HTML", obs: obsText };
-      else perguntas[pergunta].obs = [perguntas[pergunta].obs, obsText].filter(Boolean).join(" | ");
+    function appendObs(perguntas, pergunta, obsText, tipoErro = "Importado do HTML", status = "") {
+      if (!perguntas[pergunta]) perguntas[pergunta] = { status, tipo: tipoErro, obs: obsText };
+      else {
+        perguntas[pergunta].status = status || perguntas[pergunta].status || "";
+        perguntas[pergunta].tipo = tipoErro || perguntas[pergunta].tipo || "Importado do HTML";
+        perguntas[pergunta].obs = [perguntas[pergunta].obs, obsText].filter(Boolean).join(" | ");
+      }
     }
     function aplicarPendenciasManuais(clean, preview) {
       const items = preview?.auxItems || [];
@@ -810,8 +863,9 @@
       if (!faltantes.length) return clean;
       clean.perguntas = { ...(clean.perguntas || {}) };
       for (const item of faltantes) {
-        appendObs(clean.perguntas, item.pergunta, `Falta em mãos: ${item.label} (${item.detalhe}).`);
+        appendObs(clean.perguntas, item.pergunta, `Falta em mãos: ${item.label} (${item.detalhe}).`, item.tipoErro || "Comprovante faltando", "erro");
       }
+      clean.status = "divergencia";
       clean.observacao_erro = [
         clean.observacao_erro,
         `Pendências marcadas na pré-importação: ${faltantes.map((item) => item.label).join("; ")}.`,

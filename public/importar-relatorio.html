@@ -579,6 +579,14 @@
       }
       return out;
     }
+    function pagamentoResumo(rec) {
+      const partes = (rec.pagamentos || []).map((pag) => [
+        auxLabelNames[pag.tipo] || pag.tipo,
+        pag.bandeira,
+        pag.valor ? moneyText(pag.valor) : "",
+      ].filter(Boolean).join(" | "));
+      return partes.join("; ");
+    }
     function parseRelacaoVendas(text) {
       const lines = normLines(text);
       const starts = [];
@@ -689,7 +697,7 @@
             pergunta: "Quantidade de romaneios confere",
             tipoErro: "Romaneio pendente",
             label: `Romaneio tele - venda ${rec.venda}`,
-            detalhe: `${rec.cond}${rec.totalLiquido ? " | " + moneyText(rec.totalLiquido) : ""}`,
+            detalhe: [rec.cond, pagamentoResumo(rec), rec.totalLiquido ? moneyText(rec.totalLiquido) : ""].filter(Boolean).join(" | "),
             checked: true,
           });
         }

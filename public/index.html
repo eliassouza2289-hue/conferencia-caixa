@@ -80,6 +80,7 @@ aside .status{font-size:11px;padding:4px 7px;max-width:82px;text-align:center}
     <button class="btn-quiet" data-tab="relatorios">📊 Relatórios</button>
     <button class="btn-quiet" data-tab="cadastros">👥 Cadastros</button>
     <button class="btn-quiet" onclick="location.href='/importar-relatorio.html'">📥 Importar HTML</button>
+    <button class="btn-quiet" onclick="location.href='/conciliacao-semanal.html'">💳 Conciliação semanal</button>
     <button class="btn-quiet" id="toggleReport">🔎 Ocultar filtros</button>
     <button class="btn-main" data-export-pdf>📄 Exportar PDF</button>
   </div>
@@ -258,4 +259,5 @@ addPessoa.onclick=async()=>{if(!pessoaNome.value.trim())return;try{await api('/a
 </script>
 </body>
 </html>
+
 
